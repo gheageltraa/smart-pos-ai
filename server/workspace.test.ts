@@ -22,6 +22,12 @@ function createContext(role: "admin" | "user" = "admin"): TrpcContext {
 }
 
 describe("workspace access", () => {
+  it("reports a supported data provider for deployment diagnostics", async () => {
+    const result = await appRouter.createCaller(createContext("admin")).config.provider();
+    expect(["supabase", "mysql", "demo"]).toContain(result.provider);
+    expect(typeof result.supabaseReady).toBe("boolean");
+  });
+
   it("returns outlet choices for an admin workspace", async () => {
     const result = await appRouter.createCaller(createContext("admin")).workspace.me();
     expect(result.user.role).toBe("admin");

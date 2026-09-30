@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertOutlet, InsertUser, OutletMember, outlets, outletMembers, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { getSupabaseAdmin } from "./supabase";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -21,6 +22,19 @@ export async function getDb() {
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) {
     throw new Error("User openId is required for upsert");
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { error } = await supabase.from("app_users").upsert({
+      open_id: user.openId,
+      name: user.name ?? null,
+      email: user.email ?? null,
+      role: user.role ?? (user.openId === ENV.ownerOpenId ? "admin" : "user"),
+      last_signed_in: (user.lastSignedIn ?? new Date()).toISOString(),
+    }, { onConflict: "open_id" });
+    if (error) throw error;
+    return;
   }
 
   const db = await getDb();
@@ -78,6 +92,16 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 }
 
 export async function getUserByOpenId(openId: string) {
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { data, error } = await supabase.from("app_users").select("*").eq("open_id", openId).maybeSingle();
+    if (error) throw error;
+    return data ? {
+      id: Number(data.id), openId: data.open_id, name: data.name, email: data.email,
+      loginMethod: "supabase", role: data.role, createdAt: new Date(data.created_at),
+      updatedAt: new Date(data.updated_at), lastSignedIn: new Date(data.last_signed_in),
+    } : undefined;
+  }
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot get user: database not available");
@@ -96,6 +120,14 @@ const fallbackOutlets = [
 ];
 
 export async function listOutlets(userId?: number, isAdmin = false) {
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const query = supabase.from("outlets").select("id,name,code,city,active").eq("active", true).order("id");
+    const { data, error } = await query;
+    if (!error && data?.length) return data.map(outlet => ({ ...outlet, id: Number(outlet.id), active: outlet.active ? 1 : 0 }));
+    if (error) console.warn("[Supabase] listOutlets failed:", error.message);
+    return fallbackOutlets;
+  }
   const db = await getDb();
   if (!db) return fallbackOutlets;
   try {
@@ -114,6 +146,12 @@ export async function listOutlets(userId?: number, isAdmin = false) {
 }
 
 export async function createOutlet(outlet: InsertOutlet) {
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { data, error } = await supabase.from("outlets").insert({ name: outlet.name, code: outlet.code, city: outlet.city, active: Boolean(outlet.active ?? 1) }).select("id,name,code,city,active").single();
+    if (error) throw error;
+    return { ...data, id: Number(data.id), active: data.active ? 1 : 0 };
+  }
   const db = await getDb();
   if (!db) return { ...outlet, id: Date.now() };
   const result = await db.insert(outlets).values(outlet);
@@ -121,3 +159,47 @@ export async function createOutlet(outlet: InsertOutlet) {
 }
 
 export type OutletAccess = Pick<OutletMember, "outletId" | "role">;
+
+export type ProductRecord = {
+  id: number;
+  outletId: number;
+  name: string;
+  sku: string;
+  category: string;
+  unit: string;
+  stock: number;
+  minStock: number;
+  cost: number;
+  price: number;
+  supplier: string;
+  dailySales: number;
+  trend: number;
+  emoji: string;
+};
+
+export async function listProducts(outletId: number): Promise<ProductRecord[]> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return [];
+  const { data, error } = await supabase.from("products").select("*").eq("outlet_id", outletId).order("name");
+  if (error) throw error;
+  return (data ?? []).map(product => ({
+    id: Number(product.id), outletId: Number(product.outlet_id), name: product.name, sku: product.sku,
+    category: product.category, unit: product.unit, stock: Number(product.stock), minStock: Number(product.min_stock),
+    cost: Number(product.cost), price: Number(product.price), supplier: product.supplier,
+    dailySales: Number(product.daily_sales), trend: Number(product.trend), emoji: product.emoji,
+  }));
+}
+
+export async function upsertProduct(product: Omit<ProductRecord, "id"> & { id?: number }) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return product;
+  const payload = {
+    ...(product.id ? { id: product.id } : {}), outlet_id: product.outletId, name: product.name, sku: product.sku,
+    category: product.category, unit: product.unit, stock: product.stock, min_stock: product.minStock,
+    cost: product.cost, price: product.price, supplier: product.supplier, daily_sales: product.dailySales,
+    trend: product.trend, emoji: product.emoji,
+  };
+  const { data, error } = await supabase.from("products").upsert(payload, { onConflict: "outlet_id,sku" }).select("*").single();
+  if (error) throw error;
+  return data;
+}

@@ -1,14 +1,18 @@
 import { COOKIE_NAME } from "@shared/const";
 import { z } from "zod";
-import { createOutlet, listOutlets } from "./db";
+import { createOutlet, listOutlets, listProducts, upsertProduct } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM } from "./_core/llm";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { getDataProvider } from "./supabase";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
+  config: router({
+    provider: publicProcedure.query(() => ({ provider: getDataProvider(), supabaseReady: getDataProvider() === "supabase" })),
+  }),
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -26,6 +30,11 @@ export const appRouter = router({
       outlets: await listOutlets(ctx.user.id, ctx.user.role === "admin"),
     })),
     createOutlet: adminProcedure.input(z.object({ name: z.string().min(2), code: z.string().min(2).max(32), city: z.string().min(2) })).mutation(({ input }) => createOutlet({ ...input, active: 1 })),
+  }),
+
+  inventory: router({
+    list: protectedProcedure.input(z.object({ outletId: z.number().int().positive() })).query(({ input }) => listProducts(input.outletId)),
+    upsert: adminProcedure.input(z.object({ outletId: z.number().int().positive(), name: z.string().min(2), sku: z.string().min(2), category: z.string(), unit: z.string(), stock: z.number().nonnegative(), minStock: z.number().nonnegative(), cost: z.number().nonnegative(), price: z.number().nonnegative(), supplier: z.string(), dailySales: z.number().nonnegative(), trend: z.number(), emoji: z.string(), id: z.number().int().positive().optional() })).mutation(({ input }) => upsertProduct(input)),
   }),
 
   forecast: router({
