@@ -6,6 +6,7 @@ import { invokeLLM } from "./_core/llm";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { getDataProvider } from "./supabase";
+import { adjustProductStock, createPurchaseOrder, createSale, createSupplier, listPurchaseOrders, listSuppliers, updatePurchaseOrderStatus } from "./functional-db";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -33,8 +34,24 @@ export const appRouter = router({
   }),
 
   inventory: router({
-    list: protectedProcedure.input(z.object({ outletId: z.number().int().positive() })).query(({ input }) => listProducts(input.outletId)),
-    upsert: adminProcedure.input(z.object({ outletId: z.number().int().positive(), name: z.string().min(2), sku: z.string().min(2), category: z.string(), unit: z.string(), stock: z.number().nonnegative(), minStock: z.number().nonnegative(), cost: z.number().nonnegative(), price: z.number().nonnegative(), supplier: z.string(), dailySales: z.number().nonnegative(), trend: z.number(), emoji: z.string(), id: z.number().int().positive().optional() })).mutation(({ input }) => upsertProduct(input)),
+    list: publicProcedure.input(z.object({ outletId: z.number().int().positive() })).query(({ input }) => listProducts(input.outletId)),
+    upsert: publicProcedure.input(z.object({ outletId: z.number().int().positive(), name: z.string().min(2), sku: z.string().min(2), category: z.string(), unit: z.string(), stock: z.number().nonnegative(), minStock: z.number().nonnegative(), cost: z.number().nonnegative(), price: z.number().nonnegative(), supplier: z.string(), dailySales: z.number().nonnegative(), trend: z.number(), emoji: z.string(), id: z.number().int().positive().optional() })).mutation(({ input }) => upsertProduct(input)),
+    adjust: publicProcedure.input(z.object({ outletId: z.number().int().positive(), productId: z.number().int().positive(), amount: z.number().int() })).mutation(({ input }) => adjustProductStock(input.outletId, input.productId, input.amount)),
+  }),
+
+  sales: router({
+    create: publicProcedure.input(z.object({ outletId: z.number().int().positive(), paymentMethod: z.enum(["QRIS", "Tunai", "Debit"]), subtotal: z.number().nonnegative(), tax: z.number().nonnegative(), total: z.number().positive(), items: z.array(z.object({ productId: z.number().int().positive(), productName: z.string(), qty: z.number().positive(), unitPrice: z.number().nonnegative(), unitCost: z.number().nonnegative() })).min(1) })).mutation(({ input }) => createSale(input)),
+  }),
+
+  suppliers: router({
+    list: publicProcedure.query(() => listSuppliers()),
+    create: publicProcedure.input(z.object({ name: z.string().min(2), contact: z.string().min(2), phone: z.string().min(5), leadTimeDays: z.number().int().positive(), status: z.enum(["Aktif", "Review", "Nonaktif"]) })).mutation(({ input }) => createSupplier(input)),
+  }),
+
+  orders: router({
+    list: publicProcedure.input(z.object({ outletId: z.number().int().positive() })).query(({ input }) => listPurchaseOrders(input.outletId)),
+    create: publicProcedure.input(z.object({ outletId: z.number().int().positive(), supplier: z.string().min(2), productId: z.number().int().positive(), product: z.string().min(2), qty: z.number().positive(), unit: z.string().min(1), unitCost: z.number().nonnegative(), reason: z.string().min(2) })).mutation(({ input }) => createPurchaseOrder(input)),
+    updateStatus: publicProcedure.input(z.object({ id: z.union([z.number().int().positive(), z.string().min(2)]), status: z.enum(["Draft", "Dipesan", "Diterima"]) })).mutation(({ input }) => updatePurchaseOrderStatus(input.id, input.status)),
   }),
 
   forecast: router({

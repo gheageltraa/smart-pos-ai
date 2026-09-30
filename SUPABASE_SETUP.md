@@ -14,9 +14,12 @@ Never expose `SUPABASE_SERVICE_ROLE_KEY` in `VITE_*` variables or browser code.
 1. Create a Supabase project.
 2. Open **SQL Editor**.
 3. Run [`supabase/schema.sql`](supabase/schema.sql).
-4. Confirm the seeded outlets exist: `KB-01`, `KB-02`, and `KB-03`.
+4. Run [`supabase/functional_features.sql`](supabase/functional_features.sql).
+5. Confirm the seeded outlets and suppliers exist.
 
-The schema includes users, outlets, outlet memberships, products, purchase orders, and purchase-order items. Row Level Security is enabled; the Node server uses the service-role key and performs protected queries server-side.
+The schema includes users, outlets, outlet memberships, products, purchase orders, purchase-order items, suppliers, sales transactions, and transaction items. Row Level Security is enabled; the Node server uses the service-role key and performs protected queries server-side.
+
+After setup, the following actions persist to Supabase: POS checkout and stock deduction, inventory adjustment, product creation, supplier creation, purchase-order creation, and purchase-order status changes.
 
 ## 2. Configure the server
 
