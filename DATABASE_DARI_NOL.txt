@@ -1,0 +1,144 @@
+Database Kopipintar dari Nol
+
+Panduan ini menjelaskan database Kopipintar untuk pemula.
+
+#1. Apa itu database?
+
+Database adalah tempat menyimpan data aplikasi secara permanen. Kalau data hanya disimpan di browser dengan localStorage, data bisa hilang saat cache dihapus atau tidak bisa dipakai bersama oleh beberapa kasir.
+
+Di Kopipintar, database menyimpan:
+
+- outlet dan membership pengguna;
+- produk, SKU, stok, harga beli, dan harga jual;
+- supplier dan lead time;
+- transaksi POS dan item transaksi;
+- purchase order dan statusnya.
+
+#2. Apa itu Supabase?
+
+Supabase adalah layanan online yang menyediakan PostgreSQL database, login, API, storage, dan dashboard. Untuk lomba, Supabase cocok karena database bisa diakses dari laptop, server deployment, dan beberapa perangkat kasir.
+
+> Supabase bukan file database lokal. Supabase adalah database online milik project kamu.
+
+#3. Membuat project Supabase
+
+1. Buka https://supabase.com dan buat akun.
+2. Klik New project.
+3. Isi nama project, password database, dan pilih region yang dekat.
+4. Tunggu sampai project selesai dibuat.
+5. Buka menu SQL Editor.
+6. Jalankan supabase/schema.sql.
+7. Jalankan supabase/functional_features.sql.
+
+Jalankan dua file tersebut berurutan karena file kedua menambahkan fitur supplier dan transaksi ke schema utama.
+
+#4. Memahami tabel
+
+Tabel mirip seperti spreadsheet, tetapi memiliki aturan, relasi, dan tipe data.
+
+| Tabel | Isi |
+|---|---|
+| outlets | daftar cabang/outlet |
+| outlet_members | hubungan user dengan outlet dan role |
+| products | katalog produk dan stok |
+| suppliers | vendor, kontak, dan lead time |
+| purchase_orders | header purchase order |
+| purchase_order_items | detail produk di purchase order |
+| sales_transactions | header transaksi POS |
+| sales_transaction_items | detail item yang terjual |
+
+Header-detail dipakai agar satu transaksi bisa memiliki banyak item. Contohnya, satu transaksi membeli kopi dan croissant: satu baris di sales_transactions, dua baris di sales_transaction_items.
+
+#5. Primary key dan foreign key
+
+- Primary key adalah ID unik setiap baris, misalnya products.id.
+- Foreign key adalah kolom yang menunjuk ke tabel lain, misalnya sales_transaction_items.product_id menunjuk ke products.id.
+- Relasi ini mencegah data transaksi menunjuk ke produk yang tidak ada.
+
+#6. Dua jenis Supabase key
+
+##SUPABASE_SERVICE_ROLE_KEY
+
+- Hanya untuk server.
+- Jangan pernah diawali VITE_.
+- Jangan dimasukkan ke browser, GitHub, atau screenshot.
+- Dipakai backend Kopipintar untuk operasi database.
+
+##VITE_SUPABASE_ANON_KEY
+
+- Boleh dipakai di browser.
+- Dipakai Supabase Auth Google di frontend.
+- Tetap gunakan RLS agar akses data aman.
+
+Tambahkan variable berikut di hosting/server:
+
+bash
+SUPABASE_URL=https://PROJECT_ID.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=service-role-key-rahasia
+VITE_SUPABASE_URL=https://PROJECT_ID.supabase.co
+VITE_SUPABASE_ANON_KEY=anon-public-key
+
+
+#7. Google Auth
+
+1. Di Supabase buka Authentication > Providers.
+2. Aktifkan Google.
+3. Buat OAuth Client ID di Google Cloud Console.
+4. Masukkan Client ID dan Client Secret ke provider Google di Supabase.
+5. Di Google Cloud, tambahkan callback URL Supabase yang ditampilkan pada halaman provider.
+6. Di Supabase buka Authentication > URL Configuration.
+7. Masukkan URL aplikasi pada Site URL.
+8. Tambahkan URL lokal, misalnya http://localhost:3000, pada Redirect URLs.
+9. Isi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.
+
+Di aplikasi, buka Settings > Authentication > Masuk dengan Google. Jika variable belum ada, aplikasi akan menampilkan pesan konfigurasi.
+
+#8. Apa itu RLS?
+
+RLS atau Row Level Security adalah aturan yang menentukan baris mana yang boleh dibaca atau diubah oleh user.
+
+Contoh sederhana:
+
+- kasir outlet A hanya boleh melihat data outlet A;
+- admin boleh mengelola supplier;
+- user yang belum login tidak boleh membaca data privat.
+
+Untuk demo backend saat ini, server memakai service-role key. Saat deploy sungguhan, tambahkan policy RLS yang lebih ketat dan verifikasi user Supabase di backend.
+
+#9. Alur data POS
+
+1. Kasir memilih produk.
+2. Browser mengirim item, outlet, metode pembayaran, subtotal, pajak, dan total ke tRPC backend.
+3. Backend membuat satu baris di sales_transactions.
+4. Backend membuat detail di sales_transaction_items.
+5. Backend mengurangi stok produk.
+6. UI menampilkan modal pembayaran berhasil.
+
+#10. Menjalankan lokal
+
+bash
+pnpm install
+pnpm check
+pnpm test
+pnpm build
+pnpm start
+
+
+Sebelum pnpm start, isi environment variables. Buka http://localhost:3000.
+
+#11. Jika database belum dikonfigurasi
+
+Aplikasi tetap dapat dibuka dalam demo mode. Produk dan order lokal disimpan di browser. Namun, data belum menjadi data bersama dan belum tersimpan permanen di Supabase.
+
+#12. Checklist sebelum lomba
+
+- [ ] Dua file SQL sudah dijalankan.
+- [ ] Supabase URL benar.
+- [ ] Service role key hanya ada di server.
+- [ ] Google provider aktif.
+- [ ] Redirect URL Google benar.
+- [ ] VITE_SUPABASE_ANON_KEY sudah diisi.
+- [ ] Buat satu transaksi percobaan.
+- [ ] Pastikan stok berubah.
+- [ ] Buat draft purchase order.
+- [ ] Pastikan data terlihat setelah refresh.

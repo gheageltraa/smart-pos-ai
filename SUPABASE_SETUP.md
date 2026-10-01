@@ -30,6 +30,8 @@ NODE_ENV=production
 PORT=3000
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 JWT_SECRET=your-long-random-secret
 VITE_APP_ID=your-manus-app-id
 VITE_OAUTH_PORTAL_URL=https://oauth.manus.im
@@ -38,7 +40,11 @@ OWNER_OPEN_ID=your-owner-open-id
 OWNER_NAME=Your Name
 ```
 
-The current authentication layer is Manus OAuth. Supabase is the persistent application data backend. If you want fully independent authentication later, replace the Manus session middleware with Supabase Auth JWT verification.
+The app now supports Google Auth through Supabase Auth as an additional browser login. In Supabase, open **Authentication → Providers → Google**, enable it, enter your Google OAuth Client ID/Secret, then add your deployed URL and `http://localhost:3000` under **Authentication → URL Configuration → Redirect URLs**. The Settings page shows the current Google account and provides sign-out.
+
+Manus OAuth remains available as a legacy login path. Supabase is also the persistent application data backend. For a production security hardening pass, replace public demo mutations with Supabase Auth JWT verification and stricter RLS policies.
+
+For a beginner explanation of tables, keys, RLS, SQL, Google Auth, and local setup, read [`DATABASE_DARI_NOL.md`](DATABASE_DARI_NOL.md) or [`DATABASE_DARI_NOL.txt`](DATABASE_DARI_NOL.txt).
 
 ## 3. Run locally
 
