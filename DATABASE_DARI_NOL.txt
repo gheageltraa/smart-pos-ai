@@ -11,6 +11,10 @@ Database Kopipintar dari Nol
 7. Isi environment variables di hosting atau file lokal yang tidak di-commit.
 8. Jalankan aplikasi dengan pnpm install, pnpm check, pnpm test, pnpm build, lalu pnpm start.
 
+#Alur halaman aplikasi
+
+Saat membuka website, halaman pertama adalah Login/Signup. Kamu bisa membuat akun email/password, masuk dengan Google jika Supabase Auth sudah diaktifkan, atau memilih mode demo untuk presentasi lomba. Setelah berhasil masuk, user melihat Dashboard utama. Dari tombol Transaksi baru atau menu POS / Kasir, user berpindah ke page kedua untuk melakukan transaksi.
+
 #Apa itu database?
 
 Database adalah tempat menyimpan data secara permanen. Kopipintar menyimpan outlet, user, produk, stok, supplier, transaksi POS, dan purchase order. Tanpa database, data demo hanya tersimpan di browser dan tidak bisa dipakai bersama oleh beberapa perangkat.
