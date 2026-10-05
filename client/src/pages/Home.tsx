@@ -397,7 +397,21 @@ export default function Home() {
   }, [activePage, products, orders, auth.isAuthenticated, googleUser]);
   const currentUser = auth.user || (googleUser ? { name: profile?.full_name || googleUser.user_metadata?.full_name || googleUser.email, email: googleUser.email, role: profile?.role || "admin" } : null);
   const openWorkspace = () => { localStorage.setItem("kopipintar-demo-access", "true"); setDemoAccess(true); setActivePage("dashboard"); };
-  if (!auth.isAuthenticated && !googleUser && !demoAccess) return <AuthLanding onDemo={openWorkspace} onGoogle={googleLogin} onToast={showToast} />;
   useEffect(() => { if (profile?.role === "kasir" && activePage !== "pos") setActivePage("pos"); }, [profile?.role, activePage]);
-  return <div className="shell-wrap"><AppShell activePage={activePage} setActivePage={setActivePage} onNotifications={() => setNotificationsOpen(current => !current)} outlets={outlets} selectedOutletId={selectedOutletId} onOutletChange={id => { setSelectedOutletId(id); showToast({ tone: "info", message: `Berpindah ke ${outlets.find(outlet => outlet.id === id)?.name || "outlet"}.` }); }} user={currentUser} onLogout={() => { if (auth.isAuthenticated) { auth.logout().then(() => showToast({ tone: "success", message: "Anda sudah keluar dari workspace." })); } else if (googleUser) { googleLogout(); } else { localStorage.removeItem("kopipintar-demo-access"); setDemoAccess(false); } }}>{content}</AppShell>{supabaseLoading && <div style={{ position: "fixed", top: 76, right: 24, zIndex: 40, padding: "8px 12px", borderRadius: 999, background: "var(--surface)", border: "1px solid var(--line)", color: "var(--ink-soft)", fontSize: 11, boxShadow: "0 8px 18px rgba(35,56,46,.08)" }}>Memuat data live…</div>}{notificationsOpen && <NotificationPanel onClose={() => setNotificationsOpen(false)} onNavigate={setActivePage} />}{forecastProduct && <ForecastQuickModal product={forecastProduct} onClose={() => setForecastProduct(null)} onCreateDraft={createDraft} />}{toast && <div className={`toast ${toast.tone}`}><Check size={16} />{toast.message}</div>}</div>;
+  const handleLogout = async () => {
+    try {
+      if (supabase) await supabase.auth.signOut();
+      if (auth.isAuthenticated) await auth.logout();
+    } finally {
+      localStorage.removeItem("kopipintar-demo-access");
+      setDemoAccess(false);
+      setGoogleUser(null);
+      setProfile(null);
+      setNotificationsOpen(false);
+      setActivePage("dashboard");
+      showToast({ tone: "success", message: "Anda sudah keluar. Silakan login kembali." });
+    }
+  };
+  if (!auth.isAuthenticated && !googleUser && !demoAccess) return <AuthLanding onDemo={openWorkspace} onGoogle={googleLogin} onToast={showToast} />;
+  return <div className="shell-wrap"><AppShell activePage={activePage} setActivePage={setActivePage} onNotifications={() => setNotificationsOpen(current => !current)} outlets={outlets} selectedOutletId={selectedOutletId} onOutletChange={id => { setSelectedOutletId(id); showToast({ tone: "info", message: `Berpindah ke ${outlets.find(outlet => outlet.id === id)?.name || "outlet"}.` }); }} user={currentUser} onLogout={handleLogout}>{content}</AppShell>{supabaseLoading && <div style={{ position: "fixed", top: 76, right: 24, zIndex: 40, padding: "8px 12px", borderRadius: 999, background: "var(--surface)", border: "1px solid var(--line)", color: "var(--ink-soft)", fontSize: 11, boxShadow: "0 8px 18px rgba(35,56,46,.08)" }}>Memuat data live…</div>}{notificationsOpen && <NotificationPanel onClose={() => setNotificationsOpen(false)} onNavigate={setActivePage} />}{forecastProduct && <ForecastQuickModal product={forecastProduct} onClose={() => setForecastProduct(null)} onCreateDraft={createDraft} />}{toast && <div className={`toast ${toast.tone}`}><Check size={16} />{toast.message}</div>}</div>;
 }
