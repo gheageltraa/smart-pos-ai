@@ -24,6 +24,17 @@ pnpm db:setup
 unset SUPABASE_DB_URL
 ```
 
+`db:setup` tidak pernah menulis langsung ke `auth.users`. Setelah schema selesai, buat akun demo melalui API resmi GoTrue Admin:
+
+```bash
+export SUPABASE_URL="https://PROJECT_ID.supabase.co"
+export SUPABASE_SERVICE_ROLE_KEY="server-only-service-role-key"
+pnpm auth:seed
+unset SUPABASE_SERVICE_ROLE_KEY
+```
+
+Script `scripts/create-users.js` memakai `supabase.auth.admin.createUser({ email, password, email_confirm: true })`, lalu menyimpan `user.id` ke `profiles`. Service-role key hanya boleh ada di server/terminal sementara dan tidak boleh masuk ke `VITE_*` atau repository.
+
 Script membuat dan mengisi:
 
 - `categories`
@@ -31,8 +42,9 @@ Script membuat dan mengisi:
 - `suppliers`
 - `sales`
 - `sale_items`
+- `profiles` dan `purchase_orders`
 
-Seed demo berisi 15 produk, 5 supplier, dan 120 transaksi dengan 360 item transaksi dalam rentang 30 hari. RLS diaktifkan dan policy CRUD anon/authenticated dibuat untuk kebutuhan prototype lomba. Untuk produksi, policy harus dibatasi berdasarkan user dan outlet membership.
+Seed demo berisi 15 produk, 5 supplier, dan 120 transaksi dengan 360 item transaksi dalam rentang 30 hari. RLS role-aware membatasi operasi admin/kasir. Trigger PostgreSQL `sale_item_decrements_stock` mengurangi stok setelah `sale_items` dibuat.
 
 ## Alur login dan demo
 

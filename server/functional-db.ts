@@ -40,23 +40,17 @@ export async function createSale(input: SaleInput) {
   const supabase = getSupabaseAdmin();
   const transactionNumber = `KBP-${Date.now().toString().slice(-8)}`;
   if (!supabase) return { transactionNumber, total: input.total, provider: "demo" as const };
-  const { data: transaction, error: transactionError } = await supabase.from("sales_transactions").insert({ outlet_id: input.outletId, transaction_number: transactionNumber, payment_method: input.paymentMethod, subtotal: input.subtotal, tax: input.tax, total: input.total }).select("*").single();
-  if (transactionError) throw transactionError;
-  const { error: itemError } = await supabase.from("sales_transaction_items").insert(input.items.map(item => ({ transaction_id: transaction.id, product_id: item.productId, product_name: item.productName, qty: item.qty, unit_price: item.unitPrice, unit_cost: item.unitCost, line_total: item.qty * item.unitPrice })));
+  const { data: sale, error: saleError } = await supabase.from("sales").insert({ outlet_id: input.outletId, transaction_number: transactionNumber, payment_method: input.paymentMethod, subtotal: input.subtotal, tax: input.tax, total: input.total }).select("*").single();
+  if (saleError) throw saleError;
+  const { error: itemError } = await supabase.from("sale_items").insert(input.items.map(item => ({ sale_id: sale.id, product_id: item.productId, product_name: item.productName, qty: item.qty, unit_price: item.unitPrice, unit_cost: item.unitCost, line_total: item.qty * item.unitPrice })));
   if (itemError) throw itemError;
-  for (const item of input.items) {
-    const { data: product, error: readError } = await supabase.from("products").select("stock").eq("id", item.productId).eq("outlet_id", input.outletId).single();
-    if (readError) throw readError;
-    const { error: stockError } = await supabase.from("products").update({ stock: Math.max(0, Number(product.stock) - item.qty), updated_at: new Date().toISOString() }).eq("id", item.productId).eq("outlet_id", input.outletId);
-    if (stockError) throw stockError;
-  }
   return { transactionNumber, total: input.total, provider: "supabase" as const };
 }
 
 export async function listPurchaseOrders(outletId: number) {
   const supabase = getSupabaseAdmin();
   if (!supabase) return [];
-  const { data, error } = await supabase.from("purchase_orders").select("*, purchase_order_items(*)").eq("outlet_id", outletId).order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("purchase_orders").select("*").eq("outlet_id", outletId).order("created_at", { ascending: false });
   if (error) throw error;
   return data ?? [];
 }
@@ -66,14 +60,12 @@ export async function createPurchaseOrder(input: { outletId: number; supplier: s
   const orderNumber = `PO-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${Date.now().toString().slice(-4)}`;
   const total = input.qty * input.unitCost;
   if (!supabase) return { id: orderNumber, orderNumber, ...input, total, status: "Draft" as const };
-  const { data: order, error: orderError } = await supabase.from("purchase_orders").insert({ outlet_id: input.outletId, order_number: orderNumber, supplier: input.supplier, total, status: "Draft" }).select("*").single();
-  if (orderError) throw orderError;
-  const { error: itemError } = await supabase.from("purchase_order_items").insert({ purchase_order_id: order.id, product_id: input.productId, product_name: input.product, qty: input.qty, unit: input.unit, unit_cost: input.unitCost, reason: input.reason });
-  if (itemError) throw itemError;
+  const { data: order, error } = await supabase.from("purchase_orders").insert({ outlet_id: input.outletId, order_number: orderNumber, supplier: input.supplier, product_id: input.productId, product_name: input.product, qty: input.qty, unit: input.unit, unit_cost: input.unitCost, total, reason: input.reason, status: "Draft" }).select("*").single();
+  if (error) throw error;
   return { ...order, id: Number(order.id), orderNumber };
 }
 
-export async function updatePurchaseOrderStatus(id: number | string, status: "Draft" | "Dipesan" | "Diterima") {
+export async function updatePurchaseOrderStatus(id: number | string, status: "Draft" | "Ordered" | "Received") {
   const supabase = getSupabaseAdmin();
   if (!supabase) return { id, status };
   const query = typeof id === "number" ? supabase.from("purchase_orders").update({ status }).eq("id", id) : supabase.from("purchase_orders").update({ status }).eq("order_number", id);

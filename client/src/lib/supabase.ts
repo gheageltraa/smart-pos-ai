@@ -10,6 +10,25 @@ export const supabase = isSupabaseAuthConfigured
     })
   : null;
 
+export type KopipintarRole = "admin" | "kasir";
+export type KopipintarProfile = { id: string; username: string; full_name: string | null; role: KopipintarRole };
+
+export const usernameEmail = (username: string) => `${username.trim().toLowerCase()}@kopipintar.com`;
+
+export async function signInWithUsername(username: string, password: string) {
+  const client = requireClient();
+  return client.auth.signInWithPassword({ email: usernameEmail(username), password });
+}
+
+export async function getCurrentProfile() {
+  const client = requireClient();
+  const { data: session } = await client.auth.getSession();
+  if (!session.session?.user) return null;
+  const { data, error } = await client.from("profiles").select("id, username, full_name, role").eq("id", session.session.user.id).maybeSingle();
+  if (error) throw error;
+  return data as KopipintarProfile | null;
+}
+
 export type SupabaseProduct = {
   id: number;
   name: string;
@@ -125,6 +144,5 @@ export async function createSupabaseSale(input: {
     line_total: item.qty * item.unitPrice,
   })));
   if (itemsError) throw itemsError;
-  for (const item of input.items) await adjustSupabaseProductStock(item.productId, input.outletId, -item.qty);
   return { transactionNumber: sale.transaction_number, total: input.total, provider: "supabase" as const };
 }

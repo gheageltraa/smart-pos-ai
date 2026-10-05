@@ -51,7 +51,7 @@ export const appRouter = router({
   orders: router({
     list: publicProcedure.input(z.object({ outletId: z.number().int().positive() })).query(({ input }) => listPurchaseOrders(input.outletId)),
     create: publicProcedure.input(z.object({ outletId: z.number().int().positive(), supplier: z.string().min(2), productId: z.number().int().positive(), product: z.string().min(2), qty: z.number().positive(), unit: z.string().min(1), unitCost: z.number().nonnegative(), reason: z.string().min(2) })).mutation(({ input }) => createPurchaseOrder(input)),
-    updateStatus: publicProcedure.input(z.object({ id: z.union([z.number().int().positive(), z.string().min(2)]), status: z.enum(["Draft", "Dipesan", "Diterima"]) })).mutation(({ input }) => updatePurchaseOrderStatus(input.id, input.status)),
+    updateStatus: publicProcedure.input(z.object({ id: z.union([z.number().int().positive(), z.string().min(2)]), status: z.enum(["Draft", "Ordered", "Received"]) })).mutation(({ input }) => updatePurchaseOrderStatus(input.id, input.status)),
   }),
 
   forecast: router({

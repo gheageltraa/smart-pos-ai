@@ -12,6 +12,7 @@
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "db:setup": "node scripts/db-setup.js",
+    "auth:seed": "node scripts/create-users.js",
     "package:zip": "node scripts/package-deploy.mjs"
   },
   "dependencies": {
