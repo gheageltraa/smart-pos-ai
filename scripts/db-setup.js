@@ -192,11 +192,12 @@ async function setup() {
       await client.query(`drop policy if exists "kopipintar_anon_update_${table}" on public.${table}`);
       await client.query(`drop policy if exists "kopipintar_anon_delete_${table}" on public.${table}`);
     }
-    for (const [name, table] of [["profiles_self_read","profiles"],["catalog_public_read","categories"],["supplier_public_read","suppliers"],["products_public_read","products"],["products_admin_write","products"],["sales_admin_read","sales"],["sales_staff_insert","sales"],["sale_items_admin_read","sale_items"],["sale_items_staff_insert","sale_items"],["purchase_orders_admin_all","purchase_orders"]]) {
+    for (const [name, table] of [["profiles_self_read","profiles"],["Users can view own profile","profiles"],["catalog_public_read","categories"],["supplier_public_read","suppliers"],["products_public_read","products"],["products_admin_write","products"],["sales_admin_read","sales"],["sales_staff_insert","sales"],["sale_items_admin_read","sale_items"],["sale_items_staff_insert","sale_items"],["purchase_orders_admin_all","purchase_orders"]]) {
       await client.query(`drop policy if exists "${name}" on public.${table}`);
     }
     await client.query(`
-      create policy "profiles_self_read" on public.profiles for select to authenticated using (id = auth.uid());
+      alter table public.profiles enable row level security;
+      create policy "Users can view own profile" on public.profiles for select to authenticated using (auth.uid() = id);
       create policy "catalog_public_read" on public.categories for select to anon, authenticated using (true);
       create policy "supplier_public_read" on public.suppliers for select to anon, authenticated using (true);
       create policy "products_public_read" on public.products for select to anon, authenticated using (true);

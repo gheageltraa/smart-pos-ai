@@ -13,7 +13,10 @@ export const supabase = isSupabaseAuthConfigured
 export type KopipintarRole = "admin" | "kasir";
 export type KopipintarProfile = { id: string; username: string; full_name: string | null; role: KopipintarRole };
 
-export const usernameEmail = (username: string) => `${username.trim().toLowerCase()}@kopipintar.com`;
+export const usernameEmail = (username: string) => {
+  const normalized = username.trim().toLowerCase();
+  return normalized.includes("@") ? normalized : `${normalized}@kopipintar.com`;
+};
 
 export async function signInWithUsername(username: string, password: string) {
   const client = requireClient();
