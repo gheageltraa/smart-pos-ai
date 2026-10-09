@@ -1,6 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertOutlet, InsertUser, OutletMember, outlets, outletMembers, users } from "../drizzle/schema";
+import {
+  InsertOutlet,
+  InsertUser,
+  OutletMember,
+  outlets,
+  outletMembers,
+  users,
+} from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { getSupabaseAdmin } from "./supabase";
 
@@ -26,13 +33,16 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 
   const supabase = getSupabaseAdmin();
   if (supabase) {
-    const { error } = await supabase.from("app_users").upsert({
-      open_id: user.openId,
-      name: user.name ?? null,
-      email: user.email ?? null,
-      role: user.role ?? (user.openId === ENV.ownerOpenId ? "admin" : "user"),
-      last_signed_in: (user.lastSignedIn ?? new Date()).toISOString(),
-    }, { onConflict: "open_id" });
+    const { error } = await supabase.from("app_users").upsert(
+      {
+        open_id: user.openId,
+        name: user.name ?? null,
+        email: user.email ?? null,
+        role: user.role ?? (user.openId === ENV.ownerOpenId ? "admin" : "user"),
+        last_signed_in: (user.lastSignedIn ?? new Date()).toISOString(),
+      },
+      { onConflict: "open_id" }
+    );
     if (error) throw error;
     return;
   }
@@ -70,8 +80,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.role = user.role;
       updateSet.role = user.role;
     } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
+      values.role = "admin";
+      updateSet.role = "admin";
     }
 
     if (!values.lastSignedIn) {
@@ -94,13 +104,25 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 export async function getUserByOpenId(openId: string) {
   const supabase = getSupabaseAdmin();
   if (supabase) {
-    const { data, error } = await supabase.from("app_users").select("*").eq("open_id", openId).maybeSingle();
+    const { data, error } = await supabase
+      .from("app_users")
+      .select("*")
+      .eq("open_id", openId)
+      .maybeSingle();
     if (error) throw error;
-    return data ? {
-      id: Number(data.id), openId: data.open_id, name: data.name, email: data.email,
-      loginMethod: "supabase", role: data.role, createdAt: new Date(data.created_at),
-      updatedAt: new Date(data.updated_at), lastSignedIn: new Date(data.last_signed_in),
-    } : undefined;
+    return data
+      ? {
+          id: Number(data.id),
+          openId: data.open_id,
+          name: data.name,
+          email: data.email,
+          loginMethod: "supabase",
+          role: data.role,
+          createdAt: new Date(data.created_at),
+          updatedAt: new Date(data.updated_at),
+          lastSignedIn: new Date(data.last_signed_in),
+        }
+      : undefined;
   }
   const db = await getDb();
   if (!db) {
@@ -108,23 +130,54 @@ export async function getUserByOpenId(openId: string) {
     return undefined;
   }
 
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.openId, openId))
+    .limit(1);
 
   return result.length > 0 ? result[0] : undefined;
 }
 
 const fallbackOutlets = [
-  { id: 1, name: "Kedai Bumi", code: "KB-01", city: "Jakarta Selatan", active: 1 },
-  { id: 2, name: "Kedai Bumi — Senopati", code: "KB-02", city: "Jakarta Selatan", active: 1 },
-  { id: 3, name: "Kedai Bumi — Bandung", code: "KB-03", city: "Bandung", active: 1 },
+  {
+    id: 1,
+    name: "Kedai Bumi",
+    code: "KB-01",
+    city: "Jakarta Selatan",
+    active: 1,
+  },
+  {
+    id: 2,
+    name: "Kedai Bumi — Senopati",
+    code: "KB-02",
+    city: "Jakarta Selatan",
+    active: 1,
+  },
+  {
+    id: 3,
+    name: "Kedai Bumi — Bandung",
+    code: "KB-03",
+    city: "Bandung",
+    active: 1,
+  },
 ];
 
 export async function listOutlets(userId?: number, isAdmin = false) {
   const supabase = getSupabaseAdmin();
   if (supabase) {
-    const query = supabase.from("outlets").select("id,name,code,city,active").eq("active", true).order("id");
+    const query = supabase
+      .from("outlets")
+      .select("id,name,code,city,active")
+      .eq("active", true)
+      .order("id");
     const { data, error } = await query;
-    if (!error && data?.length) return data.map(outlet => ({ ...outlet, id: Number(outlet.id), active: outlet.active ? 1 : 0 }));
+    if (!error && data?.length)
+      return data.map(outlet => ({
+        ...outlet,
+        id: Number(outlet.id),
+        active: outlet.active ? 1 : 0,
+      }));
     if (error) console.warn("[Supabase] listOutlets failed:", error.message);
     return fallbackOutlets;
   }
@@ -135,7 +188,14 @@ export async function listOutlets(userId?: number, isAdmin = false) {
       const rows = await db.select().from(outlets).where(eq(outlets.active, 1));
       return rows.length ? rows : fallbackOutlets;
     }
-    const rows = await db.select({ id: outlets.id, name: outlets.name, code: outlets.code, city: outlets.city, active: outlets.active })
+    const rows = await db
+      .select({
+        id: outlets.id,
+        name: outlets.name,
+        code: outlets.code,
+        city: outlets.city,
+        active: outlets.active,
+      })
       .from(outlets)
       .innerJoin(outletMembers, eq(outletMembers.outletId, outlets.id))
       .where(and(eq(outletMembers.userId, userId), eq(outlets.active, 1)));
@@ -148,7 +208,16 @@ export async function listOutlets(userId?: number, isAdmin = false) {
 export async function createOutlet(outlet: InsertOutlet) {
   const supabase = getSupabaseAdmin();
   if (supabase) {
-    const { data, error } = await supabase.from("outlets").insert({ name: outlet.name, code: outlet.code, city: outlet.city, active: Boolean(outlet.active ?? 1) }).select("id,name,code,city,active").single();
+    const { data, error } = await supabase
+      .from("outlets")
+      .insert({
+        name: outlet.name,
+        code: outlet.code,
+        city: outlet.city,
+        active: Boolean(outlet.active ?? 1),
+      })
+      .select("id,name,code,city,active")
+      .single();
     if (error) throw error;
     return { ...data, id: Number(data.id), active: data.active ? 1 : 0 };
   }
@@ -175,31 +244,64 @@ export type ProductRecord = {
   dailySales: number;
   trend: number;
   emoji: string;
+  iconName: string | null;
 };
 
 export async function listProducts(outletId: number): Promise<ProductRecord[]> {
   const supabase = getSupabaseAdmin();
   if (!supabase) return [];
-  const { data, error } = await supabase.from("products").select("*").eq("outlet_id", outletId).order("name");
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("outlet_id", outletId)
+    .order("name");
   if (error) throw error;
   return (data ?? []).map(product => ({
-    id: Number(product.id), outletId: Number(product.outlet_id), name: product.name, sku: product.sku,
-    category: product.category, unit: product.unit, stock: Number(product.stock), minStock: Number(product.min_stock),
-    cost: Number(product.cost), price: Number(product.price), supplier: product.supplier,
-    dailySales: Number(product.daily_sales), trend: Number(product.trend), emoji: product.emoji,
+    id: Number(product.id),
+    outletId: Number(product.outlet_id),
+    name: product.name,
+    sku: product.sku,
+    category: product.category,
+    unit: product.unit,
+    stock: Number(product.stock),
+    minStock: Number(product.min_stock),
+    cost: Number(product.cost),
+    price: Number(product.price),
+    supplier: product.supplier,
+    dailySales: Number(product.daily_sales),
+    trend: Number(product.trend),
+    emoji: product.emoji,
+    iconName: product.icon_name || null,
   }));
 }
 
-export async function upsertProduct(product: Omit<ProductRecord, "id"> & { id?: number }) {
+export async function upsertProduct(
+  product: Omit<ProductRecord, "id"> & { id?: number }
+) {
   const supabase = getSupabaseAdmin();
   if (!supabase) return product;
   const payload = {
-    ...(product.id ? { id: product.id } : {}), outlet_id: product.outletId, name: product.name, sku: product.sku,
-    category: product.category, unit: product.unit, stock: product.stock, min_stock: product.minStock,
-    cost: product.cost, price: product.price, supplier: product.supplier, daily_sales: product.dailySales,
-    trend: product.trend, emoji: product.emoji,
+    ...(product.id ? { id: product.id } : {}),
+    outlet_id: product.outletId,
+    name: product.name,
+    sku: product.sku,
+    category: product.category,
+    unit: product.unit,
+    stock: product.stock,
+    min_stock: product.minStock,
+    cost: product.cost,
+    price: product.price,
+    supplier: product.supplier,
+    daily_sales: product.dailySales,
+    trend: product.trend,
+    emoji: product.emoji,
+    icon_name: product.iconName,
   };
-  const { data, error } = await supabase.from("products").upsert(payload, { onConflict: "outlet_id,sku" }).select("*").single();
+  const { data, error } = await supabase
+    .from("products")
+    .upsert(payload, { onConflict: "outlet_id,sku" })
+    .select("*")
+    .single();
   if (error) throw error;
   return data;
 }

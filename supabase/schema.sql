@@ -48,6 +48,7 @@ create table if not exists public.products (
   daily_sales numeric not null default 0,
   trend numeric not null default 0,
   emoji text not null default '📦',
+  icon_name text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (outlet_id, sku)
@@ -96,3 +97,6 @@ alter table public.purchase_order_items enable row level security;
 
 -- The app server uses SUPABASE_SERVICE_ROLE_KEY and bypasses RLS.
 -- Add user-scoped policies later if the browser is allowed to query Supabase directly.
+
+-- Safe upgrade for existing deployments
+alter table public.products add column if not exists icon_name text;

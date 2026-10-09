@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
@@ -47,6 +47,20 @@ import {
   Zap,
   Receipt,
   Trash2,
+  Coffee as CoffeeIcon,
+  CupSoda,
+  CakeSlice,
+  Croissant,
+  Pizza,
+  IceCreamBowl,
+  Package,
+  Box,
+  GlassWater,
+  Sandwich,
+  Cookie,
+  Soup,
+  Milk,
+  Citrus,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { calculateChange, canAddToCart, quickCashOptions } from "@shared/pos";
@@ -90,6 +104,7 @@ type Product = {
   dailySales: number;
   trend: number;
   emoji: string;
+  iconName: string | null;
 };
 
 type CartItem = Product & { qty: number };
@@ -146,6 +161,7 @@ const initialProducts: Product[] = [
     dailySales: 4,
     trend: 18,
     emoji: "☕",
+    iconName: "Coffee",
   },
   {
     id: 2,
@@ -161,6 +177,7 @@ const initialProducts: Product[] = [
     dailySales: 2.7,
     trend: 8,
     emoji: "☕",
+    iconName: "Coffee",
   },
   {
     id: 3,
@@ -176,6 +193,7 @@ const initialProducts: Product[] = [
     dailySales: 2.1,
     trend: 32,
     emoji: "🍵",
+    iconName: "CupSoda",
   },
   {
     id: 4,
@@ -191,6 +209,7 @@ const initialProducts: Product[] = [
     dailySales: 4.8,
     trend: 14,
     emoji: "☕",
+    iconName: "Coffee",
   },
   {
     id: 5,
@@ -206,6 +225,7 @@ const initialProducts: Product[] = [
     dailySales: 3.8,
     trend: 6,
     emoji: "🧊",
+    iconName: "GlassWater",
   },
   {
     id: 6,
@@ -221,6 +241,7 @@ const initialProducts: Product[] = [
     dailySales: 2.4,
     trend: 12,
     emoji: "🥐",
+    iconName: "Croissant",
   },
   {
     id: 7,
@@ -236,6 +257,7 @@ const initialProducts: Product[] = [
     dailySales: 1.8,
     trend: -4,
     emoji: "🍫",
+    iconName: "CakeSlice",
   },
   {
     id: 8,
@@ -251,6 +273,7 @@ const initialProducts: Product[] = [
     dailySales: 6.1,
     trend: 2,
     emoji: "💧",
+    iconName: "GlassWater",
   },
   {
     id: 9,
@@ -266,6 +289,7 @@ const initialProducts: Product[] = [
     dailySales: 0.6,
     trend: 5,
     emoji: "🍯",
+    iconName: "CupSoda",
   },
   {
     id: 10,
@@ -281,6 +305,7 @@ const initialProducts: Product[] = [
     dailySales: 0.7,
     trend: 3,
     emoji: "🍮",
+    iconName: "CakeSlice",
   },
   {
     id: 11,
@@ -296,6 +321,7 @@ const initialProducts: Product[] = [
     dailySales: 2.5,
     trend: 11,
     emoji: "🍫",
+    iconName: "CakeSlice",
   },
   {
     id: 12,
@@ -311,6 +337,7 @@ const initialProducts: Product[] = [
     dailySales: 1.6,
     trend: 3,
     emoji: "🥖",
+    iconName: "Sandwich",
   },
   {
     id: 13,
@@ -326,6 +353,7 @@ const initialProducts: Product[] = [
     dailySales: 2.9,
     trend: 21,
     emoji: "🫗",
+    iconName: "CupSoda",
   },
   {
     id: 14,
@@ -341,6 +369,7 @@ const initialProducts: Product[] = [
     dailySales: 1.5,
     trend: 9,
     emoji: "☕",
+    iconName: "Coffee",
   },
   {
     id: 15,
@@ -356,6 +385,7 @@ const initialProducts: Product[] = [
     dailySales: 2.4,
     trend: 4,
     emoji: "🍋",
+    iconName: "Citrus",
   },
 ];
 
@@ -398,6 +428,51 @@ const number = (value: number) =>
   new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 }).format(value);
 const todayLabel = "Kamis, 19 September 2024";
 
+const iconOptions = [
+  { name: "Coffee", label: "Kopi", Icon: CoffeeIcon },
+  { name: "CupSoda", label: "Minuman", Icon: CupSoda },
+  { name: "CakeSlice", label: "Kue", Icon: CakeSlice },
+  { name: "Croissant", label: "Croissant", Icon: Croissant },
+  { name: "Pizza", label: "Pizza", Icon: Pizza },
+  { name: "IceCreamBowl", label: "Es krim", Icon: IceCreamBowl },
+  { name: "Package", label: "Paket", Icon: Package },
+  { name: "Box", label: "Kotak", Icon: Box },
+  { name: "GlassWater", label: "Air", Icon: GlassWater },
+  { name: "Sandwich", label: "Sandwich", Icon: Sandwich },
+  { name: "Cookie", label: "Cookie", Icon: Cookie },
+  { name: "Soup", label: "Sup", Icon: Soup },
+  { name: "Milk", label: "Susu", Icon: Milk },
+  { name: "Citrus", label: "Citrus", Icon: Citrus },
+] as const;
+const iconByEmoji: Record<string, string> = {
+  "☕": "Coffee",
+  "🍵": "CupSoda",
+  "🧊": "GlassWater",
+  "🥐": "Croissant",
+  "🍫": "CakeSlice",
+  "💧": "GlassWater",
+  "🍯": "CupSoda",
+  "🍮": "CakeSlice",
+  "🥖": "Sandwich",
+  "🫗": "CupSoda",
+  "🍋": "Citrus",
+};
+function ProductIcon({
+  product,
+  size = 26,
+}: {
+  product: Pick<Product, "iconName" | "emoji">;
+  size?: number;
+}) {
+  const selected =
+    iconOptions.find(
+      option =>
+        option.name ===
+        (product.iconName || iconByEmoji[product.emoji] || "Package")
+    ) || iconOptions.find(option => option.name === "Package")!;
+  return <selected.Icon size={size} strokeWidth={1.8} aria-hidden="true" />;
+}
+
 function mapSupabaseProduct(row: any): Product {
   return {
     id: Number(row.id),
@@ -413,6 +488,7 @@ function mapSupabaseProduct(row: any): Product {
     dailySales: Number(row.daily_sales || 0),
     trend: Number(row.trend || 0),
     emoji: row.emoji || "📦",
+    iconName: row.icon_name || null,
   };
 }
 
@@ -1376,7 +1452,9 @@ function Dashboard({
             {topProducts.map((product, index) => (
               <div className="product-row" key={product.id}>
                 <div className="rank">0{index + 1}</div>
-                <div className="product-emoji">{product.emoji}</div>
+                <div className="product-emoji">
+                  <ProductIcon product={product} size={24} />
+                </div>
                 <div className="product-row-copy">
                   <b>{product.name}</b>
                   <span>{number(product.dailySales * 10)} unit terjual</span>
@@ -1492,7 +1570,7 @@ function POS({
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   onToast: (toast: Toast) => void;
-  onTransaction: (total: number) => void;
+  onTransaction: (total: number) => void | Promise<void>;
   isAuthenticated: boolean;
   hasSupabaseSession: boolean;
   outletId: number;
@@ -1666,8 +1744,9 @@ function POS({
       });
     }
   };
-  const finishTransaction = () => {
+  const finishTransaction = async () => {
     setReceipt(null);
+    await onTransaction(total);
     setCart([]);
     setNote("");
     setCashReceived(0);
@@ -1719,7 +1798,7 @@ function POS({
               key={item.id}
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f7f0e8] text-xl">
-                {item.emoji}
+                <ProductIcon product={item} size={22} />
               </div>
               <div className="min-w-0 flex-1">
                 <b className="block truncate text-sm text-gray-800">
@@ -1900,15 +1979,13 @@ function POS({
             <button
               className="button button-secondary shrink-0"
               onClick={() =>
-                barcodeLookup
-                  .refetch()
-                  .then(() =>
-                    onToast({
-                      tone: "success",
-                      message:
-                        "Barcode gateway siap — hubungkan scanner USB/Bluetooth untuk lookup otomatis.",
-                    })
-                  )
+                barcodeLookup.refetch().then(() =>
+                  onToast({
+                    tone: "success",
+                    message:
+                      "Barcode gateway siap — hubungkan scanner USB/Bluetooth untuk lookup otomatis.",
+                  })
+                )
               }
             >
               Scan barcode
@@ -1939,8 +2016,8 @@ function POS({
                       Habis
                     </span>
                   )}
-                  <div className="mb-3 flex h-20 w-full items-center justify-center rounded-lg bg-slate-100 text-3xl transition-all duration-300 group-hover:scale-[1.03] lg:h-24 lg:text-4xl">
-                    {product.emoji}
+                  <div className="mb-3 flex h-20 w-full items-center justify-center rounded-lg bg-slate-100 text-3xl text-[var(--mint-dark)] transition-all duration-300 group-hover:scale-[1.03] lg:h-24 lg:text-4xl">
+                    <ProductIcon product={product} size={34} />
                   </div>
                   <div className="min-w-0">
                     <div className="line-clamp-2 font-semibold leading-tight text-gray-800">
@@ -2132,6 +2209,7 @@ function Inventory({
   const [filter, setFilter] = useState("Semua status");
   const [selected, setSelected] = useState<Product | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<Product | null>(null);
   const rows = products.filter(
     product =>
       product.name.toLowerCase().includes(query.toLowerCase()) &&
@@ -2283,7 +2361,9 @@ function Inventory({
                       className="table-product"
                       onClick={() => setSelected(product)}
                     >
-                      <span className="table-emoji">{product.emoji}</span>
+                      <span className="table-emoji">
+                        <ProductIcon product={product} size={22} />
+                      </span>
                       <span>
                         <b>{product.name}</b>
                         <small>{product.supplier}</small>
@@ -2348,6 +2428,10 @@ function Inventory({
         <ProductModal
           product={selected}
           onClose={() => setSelected(null)}
+          onEdit={() => {
+            setEditing(selected);
+            setSelected(null);
+          }}
           onAdjust={amount => {
             adjustStock(selected, amount);
             setSelected({
@@ -2357,9 +2441,13 @@ function Inventory({
           }}
         />
       )}{" "}
-      {showAdd && (
+      {(showAdd || editing) && (
         <AddProductModal
-          onClose={() => setShowAdd(false)}
+          initialProduct={editing || undefined}
+          onClose={() => {
+            setShowAdd(false);
+            setEditing(null);
+          }}
           onAdd={async product => {
             try {
               if (isSupabaseAuthConfigured)
@@ -2368,6 +2456,7 @@ function Inventory({
                   outlet_id: outletId,
                   min_stock: product.minStock,
                   daily_sales: product.dailySales,
+                  icon_name: product.iconName,
                 });
               else await saveProduct.mutateAsync({ ...product, outletId });
             } catch {
@@ -2376,14 +2465,29 @@ function Inventory({
                 message: "Produk belum tersimpan ke backend.",
               });
             }
-            setProducts(current => [
-              ...current,
-              { ...product, id: Math.max(...current.map(item => item.id)) + 1 },
-            ]);
+            setProducts(current => {
+              const next = product.id
+                ? current.map(item =>
+                    item.id === product.id
+                      ? { ...item, ...product, id: item.id }
+                      : item
+                  )
+                : [
+                    ...current,
+                    {
+                      ...product,
+                      id: Math.max(0, ...current.map(item => item.id)) + 1,
+                    },
+                  ];
+              return next;
+            });
             setShowAdd(false);
+            setEditing(null);
             onToast({
               tone: "success",
-              message: "Produk baru berhasil ditambahkan.",
+              message: product.id
+                ? "Produk berhasil diperbarui."
+                : "Produk baru berhasil ditambahkan.",
             });
           }}
         />
@@ -2395,10 +2499,12 @@ function Inventory({
 function ProductModal({
   product,
   onClose,
+  onEdit,
   onAdjust,
 }: {
   product: Product;
   onClose: () => void;
+  onEdit: () => void;
   onAdjust: (amount: number) => void;
 }) {
   const coverage = getCoverage(product);
@@ -2409,7 +2515,9 @@ function ProductModal({
           <X size={18} />
         </button>
         <div className="product-modal-head">
-          <div className="large-product-emoji">{product.emoji}</div>
+          <div className="large-product-emoji">
+            <ProductIcon product={product} size={42} />
+          </div>
           <div>
             <div className="eyebrow">PRODUCT DETAIL / {product.sku}</div>
             <h2>{product.name}</h2>
@@ -2471,6 +2579,9 @@ function ProductModal({
           </div>
         </div>
         <div className="modal-footer">
+          <button className="button button-secondary" onClick={onEdit}>
+            <Settings size={15} /> Edit produk
+          </button>
           <button
             className="button button-secondary"
             onClick={() => onAdjust(-1)}
@@ -2489,28 +2600,40 @@ function ProductModal({
 function AddProductModal({
   onClose,
   onAdd,
+  initialProduct,
 }: {
   onClose: () => void;
-  onAdd: (product: Omit<Product, "id">) => void;
+  onAdd: (product: Omit<Product, "id"> & { id?: number }) => void;
+  initialProduct?: Product;
 }) {
-  const [name, setName] = useState("");
-  const [price, setPrice] = useState("");
-  const [stock, setStock] = useState("");
+  const [name, setName] = useState(initialProduct?.name || "");
+  const [price, setPrice] = useState(
+    initialProduct ? String(initialProduct.price) : ""
+  );
+  const [stock, setStock] = useState(
+    initialProduct ? String(initialProduct.stock) : ""
+  );
+  const [iconName, setIconName] = useState(
+    initialProduct?.iconName || "Package"
+  );
   const submit = () => {
     if (!name || !price || !stock) return;
     onAdd({
+      ...(initialProduct ? { id: initialProduct.id } : {}),
       name,
-      sku: `NEW-${Math.floor(100 + Math.random() * 899)}`,
-      category: "Kopi",
-      unit: "pcs",
+      sku:
+        initialProduct?.sku || `NEW-${Math.floor(100 + Math.random() * 899)}`,
+      category: initialProduct?.category || "Kopi",
+      unit: initialProduct?.unit || "pcs",
       stock: Number(stock),
-      minStock: 5,
-      cost: Math.round(Number(price) * 0.5),
+      minStock: initialProduct?.minStock || 5,
+      cost: initialProduct?.cost || Math.round(Number(price) * 0.5),
       price: Number(price),
-      supplier: "Supplier baru",
-      dailySales: 1,
-      trend: 0,
-      emoji: "📦",
+      supplier: initialProduct?.supplier || "Supplier baru",
+      dailySales: initialProduct?.dailySales || 1,
+      trend: initialProduct?.trend || 0,
+      emoji: initialProduct?.emoji || "📦",
+      iconName,
     });
   };
   return (
@@ -2519,9 +2642,13 @@ function AddProductModal({
         <button className="modal-close" onClick={onClose}>
           <X size={18} />
         </button>
-        <div className="eyebrow">INVENTORY / NEW SKU</div>
-        <h2>Tambah produk</h2>
-        <p>Masukkan informasi dasar produk untuk mulai melacak stok.</p>
+        <div className="eyebrow">
+          INVENTORY / {initialProduct ? "EDIT SKU" : "NEW SKU"}
+        </div>
+        <h2>{initialProduct ? "Edit produk" : "Tambah produk"}</h2>
+        <p>
+          Pilih ikon Lucide agar produk mudah dikenali di POS dan inventory.
+        </p>
         <label>
           Nama produk
           <input
@@ -2548,6 +2675,26 @@ function AddProductModal({
             placeholder="20"
           />
         </label>
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+            Icon produk
+          </div>
+          <div className="grid grid-cols-5 gap-2 sm:grid-cols-7">
+            {iconOptions.map(({ name: optionName, label, Icon }) => (
+              <button
+                type="button"
+                key={optionName}
+                title={label}
+                aria-label={`Pilih ikon ${label}`}
+                onClick={() => setIconName(optionName)}
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-2 text-[10px] transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--mint)] ${iconName === optionName ? "border-[var(--mint)] bg-[var(--mint-soft)] text-[var(--mint-dark)] ring-2 ring-[var(--mint)]/20" : "border-gray-200 bg-white text-gray-500"}`}
+              >
+                <Icon size={21} />
+                <span className="truncate">{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="modal-footer">
           <button className="button button-secondary" onClick={onClose}>
             Batal
@@ -2675,7 +2822,9 @@ function Forecast({
                   >
                     <td>
                       <div className="table-product">
-                        <span className="table-emoji">{product.emoji}</span>
+                        <span className="table-emoji">
+                          <ProductIcon product={product} size={22} />
+                        </span>
                         <span>
                           <b>{product.name}</b>
                           <small>
@@ -3482,7 +3631,9 @@ function ForecastQuickModal({
         </button>
         <div className="quick-forecast-top">
           <div className="product-hero-mini">
-            <span>{product.emoji}</span>
+            <span>
+              <ProductIcon product={product} size={24} />
+            </span>
             <div>
               <b>{product.name}</b>
               <small>
@@ -3972,6 +4123,24 @@ export default function Home() {
   const inventoryQuery = trpc.inventory.list.useQuery(inventoryInput, {
     retry: false,
   });
+  const refreshProducts = useCallback(async () => {
+    if (isSupabaseAuthConfigured) {
+      setSupabaseLoading(true);
+      try {
+        const rows = await listSupabaseProducts(selectedOutletId);
+        if (rows.length) setProducts(rows.map(mapSupabaseProduct));
+      } catch {
+        showToast({
+          tone: "warning",
+          message: "Data live belum dapat dimuat ulang.",
+        });
+      } finally {
+        setSupabaseLoading(false);
+      }
+      return;
+    }
+    await inventoryQuery.refetch();
+  }, [inventoryQuery.refetch, selectedOutletId]);
   const ordersQuery = trpc.orders.list.useQuery(inventoryInput, {
     retry: false,
   });
@@ -4041,28 +4210,14 @@ export default function Home() {
     window.setTimeout(() => setToast(null), 3000);
   };
   useEffect(() => {
-    if (!isSupabaseAuthConfigured) return;
-    let active = true;
-    setSupabaseLoading(true);
-    listSupabaseProducts(selectedOutletId)
-      .then(rows => {
-        if (active && rows.length) setProducts(rows.map(mapSupabaseProduct));
-      })
-      .catch(() => {
-        if (active)
-          showToast({
-            tone: "warning",
-            message:
-              "Data Supabase belum dapat dimuat. Mode demo tetap tersedia.",
-          });
-      })
-      .finally(() => {
-        if (active) setSupabaseLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [selectedOutletId]);
+    if (
+      activePage === "dashboard" ||
+      activePage === "forecast" ||
+      activePage === "inventory"
+    ) {
+      void refreshProducts();
+    }
+  }, [activePage, refreshProducts]);
   useEffect(() => {
     if (!supabase) return;
     const profileFailure = (error: unknown) => {
@@ -4184,12 +4339,14 @@ export default function Home() {
           setProducts={setProducts}
           outletId={selectedOutletId}
           onToast={showToast}
-          onTransaction={() =>
+          onTransaction={async () => {
+            await refreshProducts();
             showToast({
               tone: "success",
-              message: "Penjualan tercatat di dashboard.",
-            })
-          }
+              message:
+                "Penjualan tercatat. Dashboard dan AI Forecast sudah diperbarui.",
+            });
+          }}
           isAuthenticated={auth.isAuthenticated}
           hasSupabaseSession={Boolean(googleUser)}
         />
@@ -4257,7 +4414,14 @@ export default function Home() {
     if (activePage === "help")
       return <HelpCenter onToast={showToast} onNavigate={setActivePage} />;
     return <Reports onToast={showToast} />;
-  }, [activePage, products, orders, auth.isAuthenticated, googleUser]);
+  }, [
+    activePage,
+    products,
+    orders,
+    auth.isAuthenticated,
+    googleUser,
+    refreshProducts,
+  ]);
   const currentUser =
     auth.user ||
     (googleUser

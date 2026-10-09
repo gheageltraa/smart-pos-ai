@@ -49,3 +49,6 @@ on conflict (name) do nothing;
 alter table public.suppliers enable row level security;
 alter table public.sales_transactions enable row level security;
 alter table public.sales_transaction_items enable row level security;
+
+-- Safe upgrade for existing deployments
+alter table public.products add column if not exists icon_name text;

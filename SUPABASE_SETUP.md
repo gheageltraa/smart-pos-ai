@@ -15,7 +15,8 @@ Never expose `SUPABASE_SERVICE_ROLE_KEY` in `VITE_*` variables or browser code.
 2. Open **SQL Editor**.
 3. Run [`supabase/schema.sql`](supabase/schema.sql).
 4. Run [`supabase/functional_features.sql`](supabase/functional_features.sql).
-5. Confirm the seeded outlets and suppliers exist.
+5. If the project already existed before the Icon Picker update, run [`supabase/icon_name_migration.sql`](supabase/icon_name_migration.sql).
+6. Confirm the seeded outlets, suppliers, products, and `products.icon_name` values exist.
 
 Do not insert rows directly into `auth.users`. After the schema setup, provision the demo users with the official Auth Admin API:
 
@@ -78,4 +79,4 @@ Use any Node 22 host that supports a long-running Express process:
 - Health check: `/`
 - Set the environment variables above in the host dashboard.
 
-For a static-only host, deploy the `dist/public` folder, but the backend features will not work there; use a Node host for the complete app.
+For a static-only host, deploy the `dist/public` folder, but the backend features will not work there; use a Node host for the complete app. The included `vercel.json` provides SPA rewrites for the frontend preview. Vercel static output alone does not run the Express/tRPC server, so Supabase-backed checkout, inventory writes, and server-side AI require the Node deployment described above or separate serverless API functions.

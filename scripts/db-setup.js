@@ -9,21 +9,21 @@ if (!connectionString) {
 const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
 
 const products = [
-  ["Arabica Coffee", "COF-001", "Kopi", "kg", 12, 20, 120000, 28500, "PT Coffee Supply", 4, 18, "☕"],
-  ["Robusta Coffee", "COF-002", "Kopi", "kg", 28, 15, 88000, 22000, "PT Coffee Supply", 2.7, 8, "☕"],
-  ["Matcha Latte", "DRK-001", "Non-kopi", "pack", 8, 12, 35000, 32000, "Green Tea Co.", 2.1, 32, "🍵"],
-  ["Cappuccino", "DRK-002", "Kopi", "pack", 45, 18, 15000, 28000, "PT Coffee Supply", 4.8, 14, "☕"],
-  ["Americano", "DRK-003", "Kopi", "pack", 34, 18, 12000, 24000, "PT Coffee Supply", 3.8, 6, "🧊"],
-  ["Croissant Butter", "FOD-001", "Makanan", "pcs", 18, 12, 12500, 26000, "Bakehouse Jakarta", 2.4, 12, "🥐"],
-  ["Brownies Fudge", "FOD-002", "Makanan", "pcs", 6, 10, 10000, 22000, "Bakehouse Jakarta", 1.8, -4, "🍫"],
-  ["Mineral Water", "MIN-001", "Minuman", "btl", 70, 30, 3500, 8000, "FreshMart Supply", 6.1, 2, "💧"],
-  ["Vanilla Syrup", "SYP-001", "Non-kopi", "btl", 9, 8, 75000, 115000, "Mixology Goods", 0.6, 5, "🍯"],
-  ["Caramel Sauce", "SYP-002", "Non-kopi", "btl", 15, 8, 68000, 105000, "Mixology Goods", 0.7, 3, "🍮"],
-  ["Iced Chocolate", "DRK-004", "Non-kopi", "pack", 22, 14, 18000, 30000, "Green Tea Co.", 2.5, 11, "🍫"],
-  ["Pain au Chocolat", "FOD-003", "Makanan", "pcs", 13, 10, 14000, 28000, "Bakehouse Jakarta", 1.6, 3, "🥖"],
-  ["Cold Brew", "DRK-005", "Kopi", "btl", 24, 12, 18000, 32000, "PT Coffee Supply", 2.9, 21, "🫗"],
-  ["Espresso Blend", "COF-003", "Kopi", "kg", 19, 14, 135000, 290000, "PT Coffee Supply", 1.5, 9, "☕"],
-  ["Lemon Tea", "DRK-006", "Non-kopi", "pack", 31, 15, 9500, 20000, "Green Tea Co.", 2.4, 4, "🍋"],
+  ["Arabica Coffee", "COF-001", "Kopi", "kg", 12, 20, 120000, 28500, "PT Coffee Supply", 4, 18, "☕", "Coffee"],
+  ["Robusta Coffee", "COF-002", "Kopi", "kg", 28, 15, 88000, 22000, "PT Coffee Supply", 2.7, 8, "☕", "Coffee"],
+  ["Matcha Latte", "DRK-001", "Non-kopi", "pack", 8, 12, 35000, 32000, "Green Tea Co.", 2.1, 32, "🍵", "CupSoda"],
+  ["Cappuccino", "DRK-002", "Kopi", "pack", 45, 18, 15000, 28000, "PT Coffee Supply", 4.8, 14, "☕", "Coffee"],
+  ["Americano", "DRK-003", "Kopi", "pack", 34, 18, 12000, 24000, "PT Coffee Supply", 3.8, 6, "🧊", "GlassWater"],
+  ["Croissant Butter", "FOD-001", "Makanan", "pcs", 18, 12, 12500, 26000, "Bakehouse Jakarta", 2.4, 12, "🥐", "Croissant"],
+  ["Brownies Fudge", "FOD-002", "Makanan", "pcs", 6, 10, 10000, 22000, "Bakehouse Jakarta", 1.8, -4, "🍫", "CakeSlice"],
+  ["Mineral Water", "MIN-001", "Minuman", "btl", 70, 30, 3500, 8000, "FreshMart Supply", 6.1, 2, "💧", "GlassWater"],
+  ["Vanilla Syrup", "SYP-001", "Non-kopi", "btl", 9, 8, 75000, 115000, "Mixology Goods", 0.6, 5, "🍯", "CupSoda"],
+  ["Caramel Sauce", "SYP-002", "Non-kopi", "btl", 15, 8, 68000, 105000, "Mixology Goods", 0.7, 3, "🍮", "CakeSlice"],
+  ["Iced Chocolate", "DRK-004", "Non-kopi", "pack", 22, 14, 18000, 30000, "Green Tea Co.", 2.5, 11, "🍫", "CakeSlice"],
+  ["Pain au Chocolat", "FOD-003", "Makanan", "pcs", 13, 10, 14000, 28000, "Bakehouse Jakarta", 1.6, 3, "🥖", "Sandwich"],
+  ["Cold Brew", "DRK-005", "Kopi", "btl", 24, 12, 18000, 32000, "PT Coffee Supply", 2.9, 21, "🫗", "CupSoda"],
+  ["Espresso Blend", "COF-003", "Kopi", "kg", 19, 14, 135000, 290000, "PT Coffee Supply", 1.5, 9, "☕", "Coffee"],
+  ["Lemon Tea", "DRK-006", "Non-kopi", "pack", 31, 15, 9500, 20000, "Green Tea Co.", 2.4, 4, "🍋", "Citrus"],
 ];
 
 const suppliers = [
@@ -80,6 +80,7 @@ async function setup() {
         daily_sales numeric not null default 0,
         trend numeric not null default 0,
         emoji text not null default '📦',
+        icon_name text,
         outlet_id bigint not null default 1,
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
@@ -104,6 +105,7 @@ async function setup() {
         unit_cost numeric not null default 0,
         line_total numeric not null default 0
       );
+      alter table public.products add column if not exists icon_name text;
       create index if not exists products_category_idx on public.products(category);
       create index if not exists sales_created_at_idx on public.sales(created_at desc);
       create table if not exists public.purchase_orders (
@@ -145,12 +147,12 @@ async function setup() {
       );
     }
     for (const row of products) {
-      const [name, sku, category, unit, stock, minStock, cost, price, supplier, dailySales, trend, emoji] = row;
+      const [name, sku, category, unit, stock, minStock, cost, price, supplier, dailySales, trend, emoji, iconName] = row;
       await client.query(
-        `insert into public.products (name, sku, category, category_id, unit, stock, min_stock, cost, price, supplier, daily_sales, trend, emoji, outlet_id)
-         values ($1,$2,$3,(select id from public.categories where name=$3),$4,$5,$6,$7,$8,$9,$10,$11,$12,1)
-         on conflict (sku) do update set name=excluded.name, category=excluded.category, category_id=excluded.category_id, unit=excluded.unit, stock=excluded.stock, min_stock=excluded.min_stock, cost=excluded.cost, price=excluded.price, supplier=excluded.supplier, daily_sales=excluded.daily_sales, trend=excluded.trend, emoji=excluded.emoji, updated_at=now()`,
-        [name, sku, category, unit, stock, minStock, cost, price, supplier, dailySales, trend, emoji],
+        `insert into public.products (name, sku, category, category_id, unit, stock, min_stock, cost, price, supplier, daily_sales, trend, emoji, icon_name, outlet_id)
+         values ($1,$2,$3,(select id from public.categories where name=$3),$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,1)
+         on conflict (sku) do update set name=excluded.name, category=excluded.category, category_id=excluded.category_id, unit=excluded.unit, stock=excluded.stock, min_stock=excluded.min_stock, cost=excluded.cost, price=excluded.price, supplier=excluded.supplier, daily_sales=excluded.daily_sales, trend=excluded.trend, emoji=excluded.emoji, icon_name=excluded.icon_name, updated_at=now()`,
+        [name, sku, category, unit, stock, minStock, cost, price, supplier, dailySales, trend, emoji, iconName],
       );
     }
 
