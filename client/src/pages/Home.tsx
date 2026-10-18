@@ -597,62 +597,43 @@ function Sparkline({
 }
 
 function AuthLanding({
-  onDemo,
+  onAuthenticated,
   onGoogle,
   onToast,
 }: {
-  onDemo: () => void;
+  onAuthenticated: () => void;
   onGoogle: () => void;
   onToast: (toast: Toast) => void;
 }) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
   const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+
   const submit = async () => {
     setLoginError(null);
-    if (!supabase)
-      return onToast({
-        tone: "warning",
-        message:
-          "Supabase Auth belum dikonfigurasi. Gunakan mode demo atau isi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.",
-      });
-    if ((mode === "login" ? !username : !email) || password.length < 6)
-      return onToast({
-        tone: "warning",
-        message:
-          mode === "login"
-            ? "Isi username/email dan password minimal 6 karakter."
-            : "Isi email dan password minimal 6 karakter.",
-      });
+    if (!supabase) {
+      const message =
+        "Supabase Auth belum dikonfigurasi. Isi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.";
+      setLoginError(message);
+      return onToast({ tone: "warning", message });
+    }
+    if (!username.trim() || password.length < 6) {
+      const message = "Isi username/email dan password minimal 6 karakter.";
+      setLoginError(message);
+      return onToast({ tone: "warning", message });
+    }
     setBusy(true);
     try {
-      const result =
-        mode === "login"
-          ? await signInWithUsername(username, password)
-          : await supabase.auth.signUp({
-              email,
-              password,
-              options: { data: { full_name: name } },
-            });
+      const result = await signInWithUsername(username.trim(), password);
       if (result.error) {
         setLoginError(result.error.message);
         onToast({ tone: "warning", message: result.error.message });
         return;
       }
-      onToast({
-        tone: "success",
-        message:
-          mode === "login"
-            ? "Login berhasil."
-            : "Akun berhasil dibuat. Cek email jika konfirmasi dibutuhkan.",
-      });
-      if (mode === "signup" && !result.data.session) return;
-      onDemo();
+      onToast({ tone: "success", message: "Login berhasil." });
+      onAuthenticated();
     } catch (error) {
       const message =
         error instanceof Error
@@ -664,34 +645,11 @@ function AuthLanding({
       setBusy(false);
     }
   };
+
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        padding: 24,
-        background: "var(--paper)",
-      }}
-    >
-      <div
-        style={{
-          width: "min(980px, 100%)",
-          display: "grid",
-          gridTemplateColumns: "1.1fr .9fr",
-          gap: 24,
-        }}
-      >
-        <section
-          className="panel"
-          style={{
-            padding: 34,
-            minHeight: 520,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-          }}
-        >
+    <div className="grid min-h-screen place-items-center bg-[var(--paper)] px-4 py-6 sm:px-6 lg:px-8">
+      <div className="grid w-full max-w-[980px] grid-cols-1 gap-4 md:grid-cols-[1.1fr_.9fr] md:gap-6">
+        <section className="panel hidden min-h-[520px] flex-col justify-between p-6 sm:p-8 md:flex lg:p-[34px]">
           <div>
             <div className="brand-row">
               <div className="brand-mark">
@@ -704,32 +662,18 @@ function AuthLanding({
                 <div className="brand-subtitle">OPERATING SYSTEM</div>
               </div>
             </div>
-            <div className="eyebrow" style={{ marginTop: 70 }}>
+            <div className="eyebrow mt-12 lg:mt-[70px]">
               SMART POS / BUSINESS CONTROL
             </div>
-            <h1
-              style={{
-                fontSize: "clamp(2.5rem, 6vw, 4.8rem)",
-                lineHeight: 0.98,
-                margin: "18px 0",
-              }}
-            >
+            <h1 className="my-[18px] text-[clamp(2.5rem,6vw,4.8rem)] leading-[.98]">
               Kelola kedai lebih <em>pintar.</em>
             </h1>
-            <p style={{ maxWidth: 450, lineHeight: 1.7 }}>
+            <p className="max-w-[450px] leading-[1.7]">
               Dashboard operasional untuk memantau penjualan, stok, dan
               keputusan restock dalam satu tempat.
             </p>
           </div>
-          <div
-            style={{
-              display: "flex",
-              gap: 18,
-              flexWrap: "wrap",
-              color: "var(--ink-soft)",
-              fontSize: 13,
-            }}
-          >
+          <div className="flex flex-wrap gap-[18px] text-[13px] text-[var(--ink-soft)]">
             <span>
               <b>01</b> Dashboard
             </span>
@@ -741,103 +685,46 @@ function AuthLanding({
             </span>
           </div>
         </section>
-        <section className="panel" style={{ padding: 30 }}>
-          <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
-            <button
-              className={`button ${mode === "login" ? "button-primary" : "button-secondary"}`}
-              onClick={() => setMode("login")}
-            >
-              Login
-            </button>
-            <button
-              className={`button ${mode === "signup" ? "button-primary" : "button-secondary"}`}
-              onClick={() => setMode("signup")}
-            >
-              Signup
-            </button>
+        <section className="panel w-full p-5 sm:p-7 md:p-[30px]">
+          <div className="mb-6 flex items-center gap-2 md:hidden">
+            <div className="brand-mark">
+              <Coffee size={18} />
+            </div>
+            <div>
+              <div className="brand-name">
+                Kopi<span>pintar</span>
+              </div>
+              <div className="brand-subtitle">OPERATING SYSTEM</div>
+            </div>
           </div>
-          <h2>
-            {mode === "login" ? "Selamat datang kembali" : "Buat akun operator"}
-          </h2>
+          <div className="mb-6 inline-flex rounded-lg bg-[var(--mint-soft)] p-1">
+            <span className="rounded-md bg-[var(--mint)] px-4 py-2 text-xs font-bold text-white">
+              Login
+            </span>
+          </div>
+          <h2>Selamat datang kembali</h2>
           <p>
-            {mode === "login"
-              ? "Masuk dengan username atau email untuk membuka dashboard utama dan POS."
-              : "Daftarkan akun untuk mulai mengelola outlet."}
+            Masuk dengan username atau email untuk membuka dashboard utama dan
+            POS.
           </p>
-          {mode === "signup" && (
-            <label
-              style={{
-                display: "grid",
-                gap: 7,
-                marginTop: 20,
-                fontSize: 13,
-                fontWeight: 700,
+          <label className="mt-5 grid gap-2 text-[13px] font-bold">
+            Username / Email
+            <input
+              className="select-control w-full"
+              value={username}
+              onChange={event => {
+                setUsername(event.target.value);
+                setLoginError(null);
               }}
-            >
-              Nama
-              <input
-                className="select-control"
-                value={name}
-                onChange={event => setName(event.target.value)}
-                placeholder="Nama kamu"
-              />
-            </label>
-          )}
-          {mode === "login" ? (
-            <label
-              style={{
-                display: "grid",
-                gap: 7,
-                marginTop: 16,
-                fontSize: 13,
-                fontWeight: 700,
-              }}
-            >
-              Username / Email
-              <input
-                className="select-control"
-                value={username}
-                onChange={event => {
-                  setUsername(event.target.value);
-                  setLoginError(null);
-                }}
-                placeholder="admin atau admin@kopipintar.com"
-              />
-            </label>
-          ) : (
-            <label
-              style={{
-                display: "grid",
-                gap: 7,
-                marginTop: 16,
-                fontSize: 13,
-                fontWeight: 700,
-              }}
-            >
-              Email
-              <input
-                className="select-control"
-                type="email"
-                value={email}
-                onChange={event => setEmail(event.target.value)}
-                placeholder="nama@email.com"
-              />
-            </label>
-          )}
-          <label
-            style={{
-              display: "grid",
-              gap: 7,
-              marginTop: 16,
-              fontSize: 13,
-              fontWeight: 700,
-            }}
-          >
+              placeholder="admin atau admin@kopipintar.com"
+              autoComplete="username"
+            />
+          </label>
+          <label className="mt-4 grid gap-2 text-[13px] font-bold">
             Password
-            <div style={{ position: "relative" }}>
+            <div className="relative">
               <input
-                className="select-control"
-                style={{ width: "100%", paddingRight: 42 }}
+                className="select-control w-full pr-[42px]"
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={event => {
@@ -845,6 +732,7 @@ function AuthLanding({
                   setLoginError(null);
                 }}
                 placeholder="Minimal 6 karakter"
+                autoComplete="current-password"
               />
               <button
                 type="button"
@@ -852,96 +740,40 @@ function AuthLanding({
                   showPassword ? "Sembunyikan password" : "Tampilkan password"
                 }
                 onClick={() => setShowPassword(value => !value)}
-                style={{
-                  position: "absolute",
-                  right: 8,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  display: "grid",
-                  placeItems: "center",
-                  width: 28,
-                  height: 28,
-                  color: "var(--ink-muted)",
-                  background: "transparent",
-                  borderRadius: 6,
-                }}
+                className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md bg-transparent text-[var(--ink-muted)]"
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </label>
           <button
-            className="button button-primary"
-            style={{ width: "100%", justifyContent: "center", marginTop: 22 }}
+            className="button button-primary mt-5 w-full justify-center"
             onClick={submit}
             disabled={busy}
           >
-            {busy
-              ? "Memproses..."
-              : mode === "login"
-                ? "Masuk ke Dashboard"
-                : "Buat akun"}
+            {busy ? "Memproses..." : "Masuk ke Dashboard"}
           </button>
           {loginError && (
             <div
               role="alert"
-              style={{
-                marginTop: 12,
-                padding: "10px 12px",
-                borderRadius: 8,
-                color: "#a33d39",
-                background: "#fff1ef",
-                border: "1px solid #efc7c2",
-                fontSize: 12,
-                lineHeight: 1.45,
-              }}
+              className="mt-3 rounded-lg border border-[#efc7c2] bg-[#fff1ef] px-3 py-2.5 text-xs leading-[1.45] text-[#a33d39]"
             >
               {loginError}
             </div>
           )}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              margin: "20px 0",
-              color: "var(--ink-muted)",
-              fontSize: 12,
-            }}
-          >
-            <span style={{ height: 1, background: "var(--line)", flex: 1 }} />
+          <div className="my-5 flex items-center gap-2.5 text-xs text-[var(--ink-muted)]">
+            <span className="h-px flex-1 bg-[var(--line)]" />
             atau
-            <span style={{ height: 1, background: "var(--line)", flex: 1 }} />
+            <span className="h-px flex-1 bg-[var(--line)]" />
           </div>
           <button
-            className="button button-secondary"
-            style={{ width: "100%", justifyContent: "center" }}
+            className="button button-secondary w-full justify-center"
             onClick={onGoogle}
           >
             Masuk dengan Google
           </button>
-          <button
-            className="button"
-            style={{
-              width: "100%",
-              justifyContent: "center",
-              marginTop: 10,
-              background: "transparent",
-              border: 0,
-            }}
-            onClick={onDemo}
-          >
-            Lanjutkan sebagai Demo
-          </button>
-          <small
-            style={{
-              display: "block",
-              marginTop: 18,
-              color: "var(--ink-muted)",
-              lineHeight: 1.5,
-            }}
-          >
-            Akun demo: admin / adminkopipintar atau kasir / kasirkopipintar.
+          <small className="mt-4 block leading-[1.5] text-[var(--ink-muted)]">
+            Gunakan akun operator yang sudah dibuat di Supabase Auth.
           </small>
         </section>
       </div>
@@ -973,7 +805,7 @@ function AppShell({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isCashier = user?.role === "kasir";
   return (
-    <div className="app-shell">
+    <div className="app-shell overflow-x-hidden">
       <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
         <div className="brand-row">
           <div className="brand-mark">
@@ -1063,7 +895,7 @@ function AppShell({
             {(user?.name || "AR").slice(0, 2).toUpperCase()}
           </div>
           <div>
-            <b>{user?.name || "Demo Operator"}</b>
+            <b>{user?.name || "Operator"}</b>
             <span>{user?.role === "admin" ? "Administrator" : "Cashier"}</span>
           </div>
           <button className="profile-logout" onClick={onLogout}>
@@ -1078,7 +910,7 @@ function AppShell({
           aria-label="Tutup menu"
         />
       )}
-      <main className="main-area">
+      <main className="main-area min-w-0 overflow-x-hidden">
         <header className="topbar">
           <button
             className="mobile-menu"
@@ -1940,9 +1772,9 @@ function POS({
       )}
       <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
         <span className="live-dot" />{" "}
-        {isAuthenticated
+        {isAuthenticated || hasSupabaseSession
           ? "Payment adapter aktif"
-          : "Demo mode · login untuk gateway real"}
+          : "Payment adapter siap dikonfigurasi"}
       </div>
       <button
         className="button button-primary mt-3 w-full justify-center transition-all duration-300 active:scale-[.98]"
@@ -2339,7 +2171,7 @@ function Inventory({
             Export CSV
           </button>
         </div>
-        <div className="table-wrap">
+        <div className="table-wrap overflow-x-auto">
           <table className="data-table">
             <thead>
               <tr>
@@ -2799,7 +2631,7 @@ function Forecast({
               <Zap size={13} /> Confidence 87%
             </span>
           </div>
-          <div className="table-wrap">
+          <div className="table-wrap overflow-x-auto">
             <table className="data-table forecast-table">
               <thead>
                 <tr>
@@ -3073,7 +2905,7 @@ function Orders({
             ))}
           </div>
         </div>
-        <div className="table-wrap">
+        <div className="table-wrap overflow-x-auto">
           <table className="data-table">
             <thead>
               <tr>
@@ -3341,7 +3173,7 @@ function ReportsChart() {
     { name: "Cold Brew", value: 928000 },
   ];
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 20 }}>
+    <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[1.5fr_1fr]">
       <div style={{ height: 250 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={trend}>
@@ -4078,9 +3910,6 @@ function NotificationPanel({
 export default function Home() {
   const auth = useAuth();
   const [activePage, setActivePage] = useState<PageKey>("dashboard");
-  const [demoAccess, setDemoAccess] = useState(
-    () => localStorage.getItem("kopipintar-demo-access") === "true"
-  );
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       return (
@@ -4434,11 +4263,7 @@ export default function Home() {
           role: profile?.role || "admin",
         }
       : null);
-  const openWorkspace = () => {
-    localStorage.setItem("kopipintar-demo-access", "true");
-    setDemoAccess(true);
-    setActivePage("dashboard");
-  };
+  const openAuthenticatedWorkspace = () => setActivePage("dashboard");
   useEffect(() => {
     if (profile?.role === "kasir" && activePage !== "pos") setActivePage("pos");
   }, [profile?.role, activePage]);
@@ -4447,8 +4272,6 @@ export default function Home() {
       if (supabase) await supabase.auth.signOut();
       if (auth.isAuthenticated) await auth.logout();
     } finally {
-      localStorage.removeItem("kopipintar-demo-access");
-      setDemoAccess(false);
       setGoogleUser(null);
       setProfile(null);
       setNotificationsOpen(false);
@@ -4459,10 +4282,10 @@ export default function Home() {
       });
     }
   };
-  if (!auth.isAuthenticated && !googleUser && !demoAccess)
+  if (!auth.isAuthenticated && !googleUser)
     return (
       <AuthLanding
-        onDemo={openWorkspace}
+        onAuthenticated={openAuthenticatedWorkspace}
         onGoogle={googleLogin}
         onToast={showToast}
       />
