@@ -605,11 +605,27 @@ function AuthLanding({
   onGoogle: () => void;
   onToast: (toast: Toast) => void;
 }) {
+  const rememberedLoginKey = "kopipintar-remembered-login";
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    try {
+      const remembered = JSON.parse(
+        localStorage.getItem(rememberedLoginKey) || "null"
+      ) as { username?: string; rememberMe?: boolean } | null;
+      if (remembered?.rememberMe && remembered.username) {
+        setUsername(remembered.username);
+        setRememberMe(true);
+      }
+    } catch {
+      localStorage.removeItem(rememberedLoginKey);
+    }
+  }, []);
 
   const submit = async () => {
     setLoginError(null);
@@ -631,6 +647,14 @@ function AuthLanding({
         setLoginError(result.error.message);
         onToast({ tone: "warning", message: result.error.message });
         return;
+      }
+      if (rememberMe) {
+        localStorage.setItem(
+          rememberedLoginKey,
+          JSON.stringify({ username: username.trim(), rememberMe: true })
+        );
+      } else {
+        localStorage.removeItem(rememberedLoginKey);
       }
       onToast({ tone: "success", message: "Login berhasil." });
       onAuthenticated();
@@ -745,6 +769,19 @@ function AuthLanding({
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
+          </label>
+          <label className="mt-3 flex min-h-10 cursor-pointer items-center gap-2 text-xs font-semibold text-[var(--ink-soft)]">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={event => {
+                const checked = event.target.checked;
+                setRememberMe(checked);
+                if (!checked) localStorage.removeItem(rememberedLoginKey);
+              }}
+              className="h-4 w-4 cursor-pointer accent-[var(--mint)]"
+            />
+            <span>Ingat saya</span>
           </label>
           <button
             className="button button-primary mt-5 w-full justify-center"
