@@ -1187,8 +1187,8 @@ function Dashboard({
         />
       </div>
       <div className="dashboard-grid top-grid">
-        <section className="panel chart-panel">
-          <div className="panel-header">
+        <section className="panel chart-panel min-w-0">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Performa penjualan</h2>
               <p>Revenue kotor dari semua channel</p>
@@ -1203,7 +1203,7 @@ function Dashboard({
               <option>90 hari</option>
             </select>
           </div>
-          <div className="chart-total">
+          <div className="chart-total min-w-0 flex-wrap gap-2">
             <strong>
               {period === "7 hari"
                 ? "Rp 28.400.000"
@@ -1218,8 +1218,8 @@ function Dashboard({
           </div>
           <SalesChart />
         </section>
-        <section className="panel insight-panel">
-          <div className="panel-header">
+        <section className="panel insight-panel min-w-0">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <div className="ai-kicker">
                 <span className="ai-spark">
@@ -1305,7 +1305,7 @@ function Dashboard({
       </div>
       <div className="dashboard-grid bottom-grid">
         <section className="panel">
-          <div className="panel-header">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Produk terlaris</h2>
               <p>Kontributor revenue tertinggi hari ini</p>
@@ -1319,17 +1319,24 @@ function Dashboard({
           </div>
           <div className="product-list">
             {topProducts.map((product, index) => (
-              <div className="product-row" key={product.id}>
+              <div
+                className="product-row min-w-0 gap-2 sm:gap-3"
+                key={product.id}
+              >
                 <div className="rank">0{index + 1}</div>
                 <div className="product-emoji">
                   <ProductIcon product={product} size={24} />
                 </div>
-                <div className="product-row-copy">
-                  <b>{product.name}</b>
+                <div className="product-row-copy min-w-0">
+                  <b className="truncate text-[10px] sm:text-[11px]">
+                    {product.name}
+                  </b>
                   <span>{number(product.dailySales * 10)} unit terjual</span>
                 </div>
-                <div className="product-revenue">
-                  <b>{money(product.dailySales * product.price * 10)}</b>
+                <div className="product-revenue min-w-0 max-w-[40%] sm:min-w-[86px] sm:max-w-none">
+                  <b className="whitespace-nowrap text-[10px] sm:text-[11px]">
+                    {money(product.dailySales * product.price * 10)}
+                  </b>
                   <span
                     className={
                       product.trend >= 0 ? "positive-text" : "negative-text"
@@ -1349,7 +1356,7 @@ function Dashboard({
           </div>
         </section>
         <section className="panel attention-panel">
-          <div className="panel-header">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Status inventory</h2>
               <p>Ringkasan kesehatan stok</p>
@@ -1733,17 +1740,17 @@ function POS({
         />
       </div>
       <div className="space-y-2 border-t border-gray-200 pt-3 text-sm">
-        <div className="flex justify-between text-gray-500">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-gray-500">
           <span>Subtotal</span>
           <b className="text-gray-800">{money(subtotal)}</b>
         </div>
-        <div className="flex justify-between text-gray-500">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-gray-500">
           <span>
             Pajak layanan <small>10%</small>
           </span>
           <b className="text-gray-800">{money(tax)}</b>
         </div>
-        <div className="flex justify-between border-t border-gray-200 pt-3 text-base">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-gray-200 pt-3 text-sm sm:text-base">
           <span className="font-semibold text-gray-800">Total</span>
           <strong className="text-[var(--mint-dark)]">{money(total)}</strong>
         </div>
@@ -1807,7 +1814,7 @@ function POS({
           )}
         </div>
       )}
-      <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-gray-500 sm:text-xs">
         <span className="live-dot" />{" "}
         {isAuthenticated || hasSupabaseSession
           ? "Payment adapter aktif"
@@ -1865,7 +1872,7 @@ function POS({
               <button
                 key={item}
                 onClick={() => setCategory(item)}
-                className={`rounded-full border px-4 py-2 text-sm font-medium transition-all duration-300 active:scale-95 ${category === item ? "border-[var(--mint)] bg-[var(--mint)] text-white" : "border-gray-200 bg-white text-gray-600 hover:border-[var(--mint)] hover:text-[var(--mint-dark)]"}`}
+                className={`rounded-full border px-2 py-1 text-[10px] font-medium transition-all duration-300 active:scale-95 sm:px-3 sm:py-1.5 sm:text-xs md:px-4 md:py-2 md:text-sm ${category === item ? "border-[var(--mint)] bg-[var(--mint)] text-white" : "border-gray-200 bg-white text-gray-600 hover:border-[var(--mint)] hover:text-[var(--mint-dark)]"}`}
               >
                 {item}
               </button>
@@ -1889,20 +1896,20 @@ function POS({
                     <ProductIcon product={product} size={34} />
                   </div>
                   <div className="min-w-0">
-                    <div className="line-clamp-2 font-semibold leading-tight text-gray-800">
+                    <div className="line-clamp-2 text-sm font-semibold leading-tight text-gray-800 sm:text-base">
                       {product.name}
                     </div>
-                    <div className="mt-1 text-xs text-gray-400">
+                    <div className="mt-1 truncate text-[10px] text-gray-400 sm:text-xs">
                       {product.category} · {product.unit}
                     </div>
                   </div>
                 </div>
-                <div className="mt-3 flex items-end justify-between gap-2">
-                  <strong className="font-bold text-[var(--mint-dark)]">
+                <div className="mt-3 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
+                  <strong className="whitespace-nowrap text-sm font-bold text-[var(--mint-dark)] sm:text-base">
                     {money(product.price)}
                   </strong>
                   <span
-                    className={`text-right text-[11px] text-gray-500 ${product.stock <= product.minStock ? "font-semibold text-[var(--red)]" : ""}`}
+                    className={`whitespace-nowrap text-right text-[10px] text-gray-500 sm:text-xs ${product.stock <= product.minStock ? "font-semibold text-[var(--red)]" : ""}`}
                   >
                     {product.stock} tersedia
                   </span>
@@ -2234,7 +2241,9 @@ function Inventory({
                         <ProductIcon product={product} size={22} />
                       </span>
                       <span>
-                        <b>{product.name}</b>
+                        <b className="truncate text-[10px] sm:text-[11px]">
+                          {product.name}
+                        </b>
                         <small>{product.supplier}</small>
                       </span>
                     </button>
@@ -2447,7 +2456,7 @@ function ProductModal({
             )}
           </div>
         </div>
-        <div className="modal-footer">
+        <div className="modal-footer flex-wrap">
           <button className="button button-secondary" onClick={onEdit}>
             <Settings size={15} /> Edit produk
           </button>
@@ -2507,7 +2516,7 @@ function AddProductModal({
   };
   return (
     <div className="modal-backdrop">
-      <div className="modal form-modal">
+      <div className="modal form-modal w-full max-w-[670px] p-4 sm:p-6">
         <button className="modal-close" onClick={onClose}>
           <X size={18} />
         </button>
@@ -2548,7 +2557,7 @@ function AddProductModal({
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
             Icon produk
           </div>
-          <div className="grid grid-cols-5 gap-2 sm:grid-cols-7">
+          <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7 sm:gap-2">
             {iconOptions.map(({ name: optionName, label, Icon }) => (
               <button
                 type="button"
@@ -2556,15 +2565,15 @@ function AddProductModal({
                 title={label}
                 aria-label={`Pilih ikon ${label}`}
                 onClick={() => setIconName(optionName)}
-                className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-2 text-[10px] transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--mint)] ${iconName === optionName ? "border-[var(--mint)] bg-[var(--mint-soft)] text-[var(--mint-dark)] ring-2 ring-[var(--mint)]/20" : "border-gray-200 bg-white text-gray-500"}`}
+                className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border p-1.5 text-[9px] transition-all duration-200 sm:p-2 sm:text-[10px] hover:-translate-y-0.5 hover:border-[var(--mint)] ${iconName === optionName ? "border-[var(--mint)] bg-[var(--mint-soft)] text-[var(--mint-dark)] ring-2 ring-[var(--mint)]/20" : "border-gray-200 bg-white text-gray-500"}`}
               >
                 <Icon size={21} />
-                <span className="truncate">{label}</span>
+                <span className="max-w-full truncate">{label}</span>
               </button>
             ))}
           </div>
         </div>
-        <div className="modal-footer">
+        <div className="modal-footer flex-wrap">
           <button className="button button-secondary" onClick={onClose}>
             Batal
           </button>
@@ -2659,7 +2668,7 @@ function Forecast({
       </div>
       <div className="forecast-layout">
         <section className="panel forecast-table-panel">
-          <div className="panel-header">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Prioritas restock</h2>
               <p>{riskyProducts.length} produk membutuhkan perhatian</p>
@@ -2695,7 +2704,9 @@ function Forecast({
                           <ProductIcon product={product} size={22} />
                         </span>
                         <span>
-                          <b>{product.name}</b>
+                          <b className="truncate text-[10px] sm:text-[11px]">
+                            {product.name}
+                          </b>
                           <small>
                             {product.sku} · trend {product.trend}%
                           </small>
@@ -2925,7 +2936,7 @@ function Orders({
         </div>
       </div>
       <section className="panel orders-panel">
-        <div className="panel-header">
+        <div className="panel-header min-w-0 flex-wrap">
           <div>
             <h2>Semua purchase order</h2>
             <p>Riwayat order dan status pengiriman</p>
@@ -3347,7 +3358,7 @@ function Reports({ onToast }: { onToast: (toast: Toast) => void }) {
       </div>
       <div className="report-grid">
         <section className="panel report-main">
-          <div className="panel-header">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Revenue & profit</h2>
               <p>Performa finansial 30 hari terakhir</p>
@@ -3364,7 +3375,7 @@ function Reports({ onToast }: { onToast: (toast: Toast) => void }) {
           <ReportsChart />
         </section>
         <section className="panel pnl-card">
-          <div className="panel-header">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Profit & Loss</h2>
               <p>September 2024</p>
@@ -3398,7 +3409,7 @@ function Reports({ onToast }: { onToast: (toast: Toast) => void }) {
       </div>
       <div className="report-grid bottom-reports">
         <section className="panel category-report">
-          <div className="panel-header">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Sales by category</h2>
               <p>Kontribusi revenue</p>
@@ -3436,7 +3447,7 @@ function Reports({ onToast }: { onToast: (toast: Toast) => void }) {
           </div>
         </section>
         <section className="panel performance-report">
-          <div className="panel-header">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Product performance</h2>
               <p>Produk dengan pertumbuhan tercepat</p>
@@ -3504,7 +3515,9 @@ function ForecastQuickModal({
               <ProductIcon product={product} size={24} />
             </span>
             <div>
-              <b>{product.name}</b>
+              <b className="truncate text-[10px] sm:text-[11px]">
+                {product.name}
+              </b>
               <small>
                 {product.sku} · {product.supplier}
               </small>
@@ -3549,7 +3562,7 @@ function ForecastQuickModal({
           {number(product.dailySales)} {product.unit} · Supplier lead time 3
           hari.
         </div>
-        <div className="modal-footer">
+        <div className="modal-footer flex-wrap">
           <button className="button button-secondary" onClick={onClose}>
             Nanti saja
           </button>
@@ -3603,7 +3616,7 @@ function SettingsPage({
       />
       <div className="dashboard-grid">
         <section className="panel" style={{ padding: 22 }}>
-          <div className="panel-header">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Outlet & transaksi</h2>
               <p>Preferensi ini tersimpan di perangkat kasir.</p>
@@ -3661,7 +3674,7 @@ function SettingsPage({
           </label>
         </section>
         <section className="panel" style={{ padding: 22 }}>
-          <div className="panel-header">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Google Auth</h2>
               <p>Login Google menggunakan Supabase Auth.</p>
@@ -3725,7 +3738,7 @@ function SettingsPage({
           className="panel"
           style={{ padding: 22, gridColumn: "1 / -1" }}
         >
-          <div className="panel-header">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Data & deployment</h2>
               <p>
@@ -3838,7 +3851,7 @@ function HelpCenter({
           </button>
         </section>
         <section className="panel" style={{ padding: 22 }}>
-          <div className="panel-header">
+          <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Pertanyaan umum</h2>
               <p>Jawaban kendala yang paling sering terjadi.</p>
