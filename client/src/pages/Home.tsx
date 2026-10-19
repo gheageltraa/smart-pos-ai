@@ -54,7 +54,6 @@ import {
   Pizza,
   IceCreamBowl,
   Package,
-  Box,
   GlassWater,
   Sandwich,
   Cookie,
@@ -105,6 +104,8 @@ type Product = {
   trend: number;
   emoji: string;
   iconName: string | null;
+  isBundle?: boolean;
+  bundleItems?: Array<{ componentProductId: number; quantity: number }>;
 };
 
 type CartItem = Product & { qty: number };
@@ -436,7 +437,6 @@ const iconOptions = [
   { name: "Pizza", label: "Pizza", Icon: Pizza },
   { name: "IceCreamBowl", label: "Es krim", Icon: IceCreamBowl },
   { name: "Package", label: "Paket", Icon: Package },
-  { name: "Box", label: "Kotak", Icon: Box },
   { name: "GlassWater", label: "Air", Icon: GlassWater },
   { name: "Sandwich", label: "Sandwich", Icon: Sandwich },
   { name: "Cookie", label: "Cookie", Icon: Cookie },
@@ -489,6 +489,11 @@ function mapSupabaseProduct(row: any): Product {
     trend: Number(row.trend || 0),
     emoji: row.emoji || "📦",
     iconName: row.icon_name || null,
+    isBundle: Boolean(row.is_bundle),
+    bundleItems: (row.bundle_items || []).map((item: any) => ({
+      componentProductId: Number(item.component_product_id),
+      quantity: Number(item.quantity),
+    })),
   };
 }
 
@@ -1434,6 +1439,19 @@ function Dashboard({
   );
 }
 
+function sellableStock(product: Product, products: Product[]) {
+  if (!product.isBundle) return product.stock;
+  if (!product.bundleItems?.length) return 0;
+  return Math.min(
+    ...product.bundleItems.map(item => {
+      const component = products.find(
+        candidate => candidate.id === item.componentProductId
+      );
+      return component ? Math.floor(component.stock / item.quantity) : 0;
+    })
+  );
+}
+
 function POS({
   products,
   setProducts,
@@ -1502,17 +1520,18 @@ function POS({
     }
   };
   const addToCart = (product: Product) => {
-    if (product.stock <= 0)
+    const availableStock = sellableStock(product, products);
+    if (availableStock <= 0)
       return onToast({
         tone: "warning",
         message: `${product.name} sedang habis.`,
       });
     setCart(current => {
       const found = current.find(item => item.id === product.id);
-      if (found && !canAddToCart(product.stock, found.qty)) {
+      if (found && !canAddToCart(availableStock, found.qty)) {
         onToast({
           tone: "warning",
-          message: `Stok ${product.name} hanya ${product.stock} ${product.unit}.`,
+          message: `Stok ${product.name} hanya ${availableStock} ${product.unit}.`,
         });
         return current;
       }
@@ -1520,7 +1539,7 @@ function POS({
         ? current.map(item =>
             item.id === product.id ? { ...item, qty: item.qty + 1 } : item
           )
-        : [...current, { ...product, qty: 1 }];
+        : [...current, { ...product, stock: availableStock, qty: 1 }];
     });
     setBouncingId(product.id);
     window.setTimeout(() => setBouncingId(null), 260);
@@ -1594,10 +1613,22 @@ function POS({
       }
       setProducts(current =>
         current.map(product => {
-          const item = cart.find(cartItem => cartItem.id === product.id);
-          return item
-            ? { ...product, stock: product.stock - item.qty }
-            : product;
+          const directItem = cart.find(cartItem => cartItem.id === product.id);
+          const bundleUsage = cart.reduce((totalUsage, cartItem) => {
+            const component = cartItem.bundleItems?.find(
+              item => item.componentProductId === product.id
+            );
+            return totalUsage + (component?.quantity || 0) * cartItem.qty;
+          }, 0);
+          return product.isBundle
+            ? product
+            : {
+                ...product,
+                stock: Math.max(
+                  0,
+                  product.stock - (directItem?.qty || 0) - bundleUsage
+                ),
+              };
         })
       );
       onTransaction(total);
@@ -1882,12 +1913,12 @@ function POS({
             {filtered.map(product => (
               <button
                 key={product.id}
-                disabled={product.stock === 0}
+                disabled={sellableStock(product, products) === 0}
                 onClick={() => addToCart(product)}
-                className={`group relative flex cursor-pointer flex-col justify-between rounded-xl border bg-white p-3 text-left transition-all duration-300 hover:-translate-y-1 hover:border-[var(--mint)] hover:shadow-md active:scale-[.98] lg:p-4 ${bouncingId === product.id ? "scale-95 ring-2 ring-[var(--mint)]" : ""} ${product.stock === 0 ? "cursor-not-allowed opacity-50 grayscale" : ""}`}
+                className={`group relative flex cursor-pointer flex-col justify-between rounded-xl border bg-white p-3 text-left transition-all duration-300 hover:-translate-y-1 hover:border-[var(--mint)] hover:shadow-md active:scale-[.98] lg:p-4 ${bouncingId === product.id ? "scale-95 ring-2 ring-[var(--mint)]" : ""} ${sellableStock(product, products) === 0 ? "cursor-not-allowed opacity-50 grayscale" : ""}`}
               >
                 <div>
-                  {product.stock === 0 && (
+                  {sellableStock(product, products) === 0 && (
                     <span className="absolute right-2 top-2 rounded-full bg-gray-600 px-2 py-1 text-[10px] font-bold text-white">
                       Habis
                     </span>
@@ -1911,7 +1942,9 @@ function POS({
                   <span
                     className={`whitespace-nowrap text-right text-[10px] text-gray-500 sm:text-xs ${product.stock <= product.minStock ? "font-semibold text-[var(--red)]" : ""}`}
                   >
-                    {product.stock} tersedia
+                    {product.isBundle
+                      ? `${sellableStock(product, products)} paket`
+                      : `${product.stock} tersedia`}
                   </span>
                 </div>
               </button>
@@ -2086,7 +2119,11 @@ function Inventory({
   const [selected, setSelected] = useState<Product | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
-  const rows = products.filter(
+  const inventoryProducts = products.map(product => ({
+    ...product,
+    stock: sellableStock(product, products),
+  }));
+  const rows = inventoryProducts.filter(
     product =>
       product.name.toLowerCase().includes(query.toLowerCase()) &&
       (filter === "Semua status" ||
@@ -2097,6 +2134,11 @@ function Inventory({
   const adjustMutation = trpc.inventory.adjust.useMutation();
   const saveProduct = trpc.inventory.upsert.useMutation();
   const adjustStock = async (product: Product, amount: number) => {
+    if (product.isBundle)
+      return onToast({
+        tone: "info",
+        message: "Stok paket mengikuti ketersediaan komponen.",
+      });
     try {
       if (isSupabaseAuthConfigured && canWriteSupabase)
         await adjustSupabaseProductStock(product.id, outletId, amount);
@@ -2322,6 +2364,7 @@ function Inventory({
       {(showAdd || editing) && (
         <AddProductModal
           initialProduct={editing || undefined}
+          availableProducts={products}
           onClose={() => {
             setShowAdd(false);
             setEditing(null);
@@ -2335,6 +2378,8 @@ function Inventory({
                   min_stock: product.minStock,
                   daily_sales: product.dailySales,
                   icon_name: product.iconName,
+                  is_bundle: Boolean(product.isBundle),
+                  bundle_items: product.bundleItems || [],
                 });
               else await saveProduct.mutateAsync({ ...product, outletId });
             } catch {
@@ -2479,10 +2524,12 @@ function AddProductModal({
   onClose,
   onAdd,
   initialProduct,
+  availableProducts,
 }: {
   onClose: () => void;
   onAdd: (product: Omit<Product, "id"> & { id?: number }) => void;
   initialProduct?: Product;
+  availableProducts: Product[];
 }) {
   const [name, setName] = useState(initialProduct?.name || "");
   const [price, setPrice] = useState(
@@ -2494,8 +2541,13 @@ function AddProductModal({
   const [iconName, setIconName] = useState(
     initialProduct?.iconName || "Package"
   );
+  const [isBundle, setIsBundle] = useState(Boolean(initialProduct?.isBundle));
+  const [bundleItems, setBundleItems] = useState(
+    initialProduct?.bundleItems || []
+  );
   const submit = () => {
-    if (!name || !price || !stock) return;
+    if (!name || !price || (!isBundle && !stock)) return;
+    if (isBundle && !bundleItems.length) return;
     onAdd({
       ...(initialProduct ? { id: initialProduct.id } : {}),
       name,
@@ -2503,7 +2555,7 @@ function AddProductModal({
         initialProduct?.sku || `NEW-${Math.floor(100 + Math.random() * 899)}`,
       category: initialProduct?.category || "Kopi",
       unit: initialProduct?.unit || "pcs",
-      stock: Number(stock),
+      stock: isBundle ? 0 : Number(stock),
       minStock: initialProduct?.minStock || 5,
       cost: initialProduct?.cost || Math.round(Number(price) * 0.5),
       price: Number(price),
@@ -2512,6 +2564,8 @@ function AddProductModal({
       trend: initialProduct?.trend || 0,
       emoji: initialProduct?.emoji || "📦",
       iconName,
+      isBundle,
+      bundleItems,
     });
   };
   return (
@@ -2544,15 +2598,125 @@ function AddProductModal({
             placeholder="28000"
           />
         </label>
-        <label>
-          Stok awal
+        <label className={isBundle ? "opacity-50" : ""}>
+          Stok awal{" "}
+          {isBundle && (
+            <span className="font-normal">(otomatis dari komponen)</span>
+          )}
           <input
             type="number"
-            value={stock}
+            value={isBundle ? "" : stock}
             onChange={event => setStock(event.target.value)}
-            placeholder="20"
+            placeholder={isBundle ? "Dihitung otomatis" : "20"}
+            disabled={isBundle}
           />
         </label>
+        <label className="mt-4 flex min-h-10 cursor-pointer flex-row items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--mint-soft)] px-3 py-2 text-xs font-bold text-[var(--ink)]">
+          <input
+            type="checkbox"
+            checked={isBundle}
+            onChange={event => setIsBundle(event.target.checked)}
+            className="h-4 w-4 accent-[var(--mint)]"
+          />
+          <span>Jadikan produk ini sebagai Paket / Bundle</span>
+        </label>
+        {isBundle && (
+          <div className="mt-4 rounded-xl border border-[var(--line)] bg-[#fafcfb] p-3">
+            <div className="mb-2 text-xs font-bold text-[var(--ink)]">
+              Komponen paket
+            </div>
+            <div className="space-y-2">
+              {bundleItems.map((item, index) => (
+                <div
+                  className="flex min-w-0 items-center gap-2"
+                  key={`${item.componentProductId}-${index}`}
+                >
+                  <select
+                    className="select-control min-w-0 flex-1 text-xs"
+                    value={item.componentProductId}
+                    onChange={event =>
+                      setBundleItems(current =>
+                        current.map((entry, entryIndex) =>
+                          entryIndex === index
+                            ? {
+                                ...entry,
+                                componentProductId: Number(event.target.value),
+                              }
+                            : entry
+                        )
+                      )
+                    }
+                  >
+                    {availableProducts
+                      .filter(product => product.id !== initialProduct?.id)
+                      .map(product => (
+                        <option value={product.id} key={product.id}>
+                          {product.name}
+                        </option>
+                      ))}
+                  </select>
+                  <input
+                    className="select-control w-16 text-center text-xs"
+                    type="number"
+                    min="1"
+                    value={item.quantity}
+                    onChange={event =>
+                      setBundleItems(current =>
+                        current.map((entry, entryIndex) =>
+                          entryIndex === index
+                            ? {
+                                ...entry,
+                                quantity: Math.max(
+                                  1,
+                                  Number(event.target.value)
+                                ),
+                              }
+                            : entry
+                        )
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-red-500 hover:bg-red-50"
+                    onClick={() =>
+                      setBundleItems(current =>
+                        current.filter((_, entryIndex) => entryIndex !== index)
+                      )
+                    }
+                    aria-label="Hapus komponen"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="button button-secondary mt-3 w-full justify-center text-xs"
+              onClick={() => {
+                const candidate = availableProducts.find(
+                  product =>
+                    product.id !== initialProduct?.id &&
+                    !bundleItems.some(
+                      item => item.componentProductId === product.id
+                    )
+                );
+                if (candidate)
+                  setBundleItems(current => [
+                    ...current,
+                    { componentProductId: candidate.id, quantity: 1 },
+                  ]);
+              }}
+            >
+              <Plus size={14} /> Tambah komponen
+            </button>
+            <p className="mt-2 text-[10px] leading-tight text-[var(--ink-muted)]">
+              Stok paket dihitung dari komponen dengan ketersediaan paling
+              sedikit.
+            </p>
+          </div>
+        )}
         <div style={{ marginTop: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
             Icon produk
@@ -2567,8 +2731,10 @@ function AddProductModal({
                 onClick={() => setIconName(optionName)}
                 className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border p-1.5 text-[9px] transition-all duration-200 sm:p-2 sm:text-[10px] hover:-translate-y-0.5 hover:border-[var(--mint)] ${iconName === optionName ? "border-[var(--mint)] bg-[var(--mint-soft)] text-[var(--mint-dark)] ring-2 ring-[var(--mint)]/20" : "border-gray-200 bg-white text-gray-500"}`}
               >
-                <Icon size={21} />
-                <span className="max-w-full truncate">{label}</span>
+                <Icon size={18} className="sm:h-5 sm:w-5" />
+                <span className="max-w-full text-[10px] leading-tight sm:text-xs">
+                  {label}
+                </span>
               </button>
             ))}
           </div>

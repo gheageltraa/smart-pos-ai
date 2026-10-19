@@ -63,7 +63,13 @@ export type SupabaseProduct = {
   trend: number;
   emoji: string;
   icon_name: string | null;
+  is_bundle: boolean;
   outlet_id: number;
+  bundle_items?: Array<{
+    component_product_id?: number;
+    componentProductId?: number;
+    quantity: number;
+  }>;
 };
 
 function requireClient() {
@@ -80,6 +86,27 @@ export async function listSupabaseProducts(outletId: number) {
     .order("name");
   if (error) throw error;
   const products = (data || []) as SupabaseProduct[];
+  const { data: bundleItems } = await client
+    .from("bundle_items")
+    .select("bundle_product_id, component_product_id, quantity")
+    .in(
+      "bundle_product_id",
+      products.map(product => product.id)
+    );
+  const bundleMap = new Map<
+    number,
+    Array<{ component_product_id: number; quantity: number }>
+  >();
+  for (const item of bundleItems || []) {
+    const list = bundleMap.get(Number(item.bundle_product_id)) || [];
+    list.push({
+      component_product_id: Number(item.component_product_id),
+      quantity: Number(item.quantity),
+    });
+    bundleMap.set(Number(item.bundle_product_id), list);
+  }
+  for (const product of products)
+    product.bundle_items = bundleMap.get(product.id) || [];
   const since = new Date();
   since.setDate(since.getDate() - 30);
   const { data: sales, error: salesError } = await client
@@ -151,30 +178,50 @@ export async function listSupabaseProducts(outletId: number) {
 }
 
 export async function insertSupabaseProduct(
-  input: Omit<SupabaseProduct, "id" | "outlet_id"> & { outlet_id: number }
+  input: Omit<SupabaseProduct, "id" | "outlet_id"> & {
+    id?: number;
+    outlet_id: number;
+  }
 ) {
   const client = requireClient();
-  const { data, error } = await client
-    .from("products")
-    .insert({
-      name: input.name,
-      sku: input.sku,
-      category: input.category,
-      unit: input.unit,
-      stock: input.stock,
-      min_stock: input.min_stock,
-      cost: input.cost,
-      price: input.price,
-      supplier: input.supplier,
-      daily_sales: input.daily_sales,
-      trend: input.trend,
-      emoji: input.emoji,
-      icon_name: input.icon_name,
-      outlet_id: input.outlet_id,
-    })
-    .select("*")
-    .single();
+  const values = {
+    name: input.name,
+    sku: input.sku,
+    category: input.category,
+    unit: input.unit,
+    stock: input.stock,
+    min_stock: input.min_stock,
+    cost: input.cost,
+    price: input.price,
+    supplier: input.supplier,
+    daily_sales: input.daily_sales,
+    trend: input.trend,
+    emoji: input.emoji,
+    icon_name: input.icon_name,
+    is_bundle: input.is_bundle,
+    outlet_id: input.outlet_id,
+  };
+  const query = input.id
+    ? client
+        .from("products")
+        .update(values)
+        .eq("id", input.id)
+        .eq("outlet_id", input.outlet_id)
+    : client.from("products").insert(values);
+  const { data, error } = await query.select("*").single();
   if (error) throw error;
+  await client.from("bundle_items").delete().eq("bundle_product_id", data.id);
+  if (input.is_bundle && input.bundle_items?.length) {
+    const { error: bundleError } = await client.from("bundle_items").insert(
+      input.bundle_items.map(item => ({
+        bundle_product_id: data.id,
+        component_product_id:
+          item.component_product_id ?? item.componentProductId,
+        quantity: item.quantity,
+      }))
+    );
+    if (bundleError) throw bundleError;
+  }
   return data as SupabaseProduct;
 }
 

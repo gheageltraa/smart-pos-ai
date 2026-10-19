@@ -16,7 +16,8 @@ Never expose `SUPABASE_SERVICE_ROLE_KEY` in `VITE_*` variables or browser code.
 3. Run [`supabase/schema.sql`](supabase/schema.sql).
 4. Run [`supabase/functional_features.sql`](supabase/functional_features.sql).
 5. If the project already existed before the Icon Picker update, run [`supabase/icon_name_migration.sql`](supabase/icon_name_migration.sql).
-6. Confirm the seeded outlets, suppliers, products, and `products.icon_name` values exist.
+6. Run [`supabase/bundle_migration.sql`](supabase/bundle_migration.sql) to add `products.is_bundle`, `bundle_items`, RLS, and the composite stock trigger.
+7. Confirm the seeded outlets, suppliers, products, and `products.icon_name` values exist.
 
 Do not insert rows directly into `auth.users`. After the schema setup, provision the demo users with the official Auth Admin API:
 
@@ -31,7 +32,7 @@ This creates `admin@kopipintar.com` / `adminkopipintar` and `kasir@kopipintar.co
 
 The schema includes users, outlets, outlet memberships, products, purchase orders, purchase-order items, suppliers, sales transactions, and transaction items. Row Level Security is enabled; the Node server uses the service-role key and performs protected queries server-side.
 
-After setup, the following actions persist to Supabase: POS checkout and stock deduction, inventory adjustment, product creation, supplier creation, purchase-order creation, and purchase-order status changes. Stock deduction is performed by the database trigger after a `sale_items` insert.
+After setup, the following actions persist to Supabase: POS checkout and stock deduction, inventory adjustment, product creation, supplier creation, purchase-order creation, and purchase-order status changes. Stock deduction is performed by the database trigger after a `sale_items` insert. For a bundle sale, the trigger leaves the bundle product unchanged and deducts each component according to its configured quantity in `bundle_items`.
 
 ## 2. Configure the server
 
