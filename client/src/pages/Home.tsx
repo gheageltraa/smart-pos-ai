@@ -3885,8 +3885,8 @@ function SettingsPage({
             <Boxes size={20} className="muted-icon" />
           </div>
           <p>
-            Service role key hanya diperlukan saat setup akun dan tidak boleh
-            masuk ke browser. Baca <b>DATABASE_DARI_NOL.md</b> untuk panduan
+            Kredensial setup harus tetap berada di environment lokal dan tidak
+            boleh masuk ke browser. Baca <b>docs/DATABASE_DARI_NOL.md</b> untuk panduan
             database dan deployment static.
           </p>
           <button
@@ -3894,7 +3894,7 @@ function SettingsPage({
             onClick={() =>
               onToast({
                 tone: "info",
-                message: "Gunakan DATABASE_DARI_NOL.md untuk setup Supabase.",
+                message: "Gunakan docs/DATABASE_DARI_NOL.md untuk setup Supabase.",
               })
             }
           >

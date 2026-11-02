@@ -1,5 +1,5 @@
--- Kopipintar: dynamic Lucide icon metadata
--- Safe to run multiple times in Supabase SQL Editor.
+-- Purpose: add dynamic Lucide icon metadata to products.
+-- Order: run after schema.sql creates products; safe to rerun.
 alter table public.products
   add column if not exists icon_name text;
 

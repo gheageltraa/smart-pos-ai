@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateChange, canAddToCart, quickCashOptions } from "../shared/pos";
+import { calculateChange, canAddToCart, quickCashOptions } from "./pos";
 
 describe("POS payment helpers", () => {
   it("creates the requested quick cash options", () => {

@@ -1,5 +1,6 @@
--- Kopipintar Composite / Bundle Products migration
--- Run after schema.sql and functional_features.sql.
+-- Purpose: add bundle-product tables, relations, and stock behavior.
+-- Order: run after schema.sql and functional_features.sql, then apply
+-- static_frontend.sql when enabling direct browser access.
 
 alter table public.products
   add column if not exists is_bundle boolean not null default false;

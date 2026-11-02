@@ -1,5 +1,7 @@
--- Kopipintar Smart POS / Supabase setup
--- Run this file in Supabase SQL Editor before deploying.
+-- Purpose: legacy/base schema for the original Supabase setup path.
+-- Order: run first, then functional_features.sql; apply bundle_migration.sql
+-- and icon_name_migration.sql as needed, and static_frontend.sql last for the
+-- direct-browser frontend. Do not mix this bootstrap with pnpm db:setup.
 
 create extension if not exists pgcrypto;
 
@@ -107,8 +109,8 @@ alter table public.products enable row level security;
 alter table public.purchase_orders enable row level security;
 alter table public.purchase_order_items enable row level security;
 
--- The app server uses SUPABASE_SERVICE_ROLE_KEY and bypasses RLS.
--- Add user-scoped policies later if the browser is allowed to query Supabase directly.
+-- This legacy schema is not sufficient for direct browser access by itself.
+-- Apply static_frontend.sql after the required app tables and migrations exist.
 
 -- Safe upgrade for existing deployments
 alter table public.products add column if not exists icon_name text;

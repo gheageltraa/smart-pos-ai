@@ -1,5 +1,6 @@
--- Apply after the existing Supabase schema/bootstrap to enable direct browser access.
--- The anon key is public; these policies rely on Supabase Auth and profiles.role.
+-- Purpose: enable the static frontend with Supabase Auth, RLS, and atomic checkout.
+-- Order: run after pnpm db:setup, or after schema.sql and its required
+-- functional/bundle migrations. Required app tables must already exist.
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,

@@ -111,7 +111,8 @@ smart-pos-ai/
 │       │   └── Home.tsx     ← Halaman utama: Login, Dashboard, POS, Inventaris,
 │       │                      Forecast, Laporan, Purchase Order, Supplier, Pengaturan
 │       ├── lib/
-│       │   └── supabase.ts  ← Koneksi Supabase + fungsi baca/tulis data
+│       │   ├── supabase.ts  ← Koneksi Supabase + fungsi baca/tulis data
+│       │   └── supabase.frontend.test.ts ← Tes koneksi Supabase (dilewati jika .env kosong)
 │       ├── components/      ← Komponen UI yang dipakai ulang (termasuk components/ui)
 │       ├── contexts/        ← React context
 │       └── hooks/           ← Custom hooks
@@ -128,8 +129,7 @@ smart-pos-ai/
 │   ├── create-users.js      ← Membuat akun admin & kasir lewat Supabase Admin API
 │   └── package-deploy.mjs   ← Membuat ZIP siap deploy
 │
-├── server/ , drizzle/ , shared/   ← SISA TEMPLATE LAMA. Tidak dijalankan di Vercel
-│                                    dan tidak dipakai aplikasi di browser
+├── shared/                  ← Logika kasir yang dipakai bersama (pos.ts) dan tesnya (pos.test.ts)
 ├── patches/                 ← Patch dependency (jangan dihapus; dipakai pnpm)
 │
 ├── vercel.json              ← Konfigurasi Vercel (semua rute diarahkan ke index.html)
@@ -138,10 +138,12 @@ smart-pos-ai/
 ├── package.json             ← Daftar dependency dan perintah
 ├── pnpm-lock.yaml           ← Penguncian versi dependency
 │
+├── .env.example             ← Contoh variabel lingkungan (tanpa rahasia)
 ├── README.md                ← Dokumen ini
-├── SUPABASE_SETUP.md        ← Panduan setup Supabase
-├── SUPABASE_FRONTEND_SETUP.md ← Panduan setup Supabase untuk versi frontend statis (termasuk Google)
-└── DATABASE_DARI_NOL.md     ← Panduan membuat database dari nol
+└── docs/                    ← Panduan tambahan
+    ├── SUPABASE_SETUP.md          ← Panduan setup Supabase
+    ├── SUPABASE_FRONTEND_SETUP.md ← Setup Supabase untuk frontend statis (termasuk Google)
+    └── DATABASE_DARI_NOL.md       ← Panduan membuat database dari nol
 ```
 
 > **Mau mulai membaca kode?** Buka `client/src/lib/supabase.ts` (cara aplikasi bicara ke database), lalu `client/src/pages/Home.tsx` (semua halaman), lalu `supabase/static_frontend.sql` (aturan keamanan dan logika checkout).

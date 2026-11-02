@@ -14,7 +14,7 @@ The production app is a static Vite/React frontend using `@supabase/supabase-js`
 
 ## Database and account setup
 
-For a new demo project, run `pnpm db:setup` with `SUPABASE_DB_URL` available only in the setup environment. Then run [`supabase/static_frontend.sql`](supabase/static_frontend.sql) in the Supabase SQL Editor. Provision demo accounts with `pnpm auth:seed` using `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` locally. Neither server secret is needed by the frontend or Vercel.
+For a new demo project, run `pnpm db:setup` with `SUPABASE_DB_URL` available only in the setup environment. Then run [`../supabase/static_frontend.sql`](../supabase/static_frontend.sql) in the Supabase SQL Editor. Provision demo accounts with `pnpm auth:seed` using `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` locally. Neither server secret is needed by the frontend or Vercel.
 
 The migration enables RLS, admin-only inventory/supplier/order management, role-validated checkout, and ownership checks on cashier sales. Keep it applied before deploying the client.
 
