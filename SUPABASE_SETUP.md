@@ -1,83 +1,54 @@
-# Supabase backend setup
+# Supabase setup for static deployment
 
-The app is **Supabase-ready**. The server prefers Supabase when both variables below are present, then falls back to the existing MySQL connection, then demo data:
+Kopipintar is built as a static Vite frontend. Authentication and application data use Supabase Auth and `@supabase/supabase-js` directly in the browser; Vercel does not need an Express/tRPC server.
 
-```bash
-SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVER_ONLY_SERVICE_ROLE_KEY
-```
+## 1. Prepare the database
 
-Never expose `SUPABASE_SERVICE_ROLE_KEY` in `VITE_*` variables or browser code.
+For a new demo database, bootstrap the app tables and sample data with `pnpm db:setup`. This one-time script requires a direct Supabase PostgreSQL connection string in `SUPABASE_DB_URL`; do not set it in Vercel or the browser.
 
-## 1. Create the database
+Run [`supabase/static_frontend.sql`](supabase/static_frontend.sql) in the Supabase SQL Editor after the app tables exist. It adds the direct-client RLS policies and the atomic `create_pos_sale` function. It permits:
 
-1. Create a Supabase project.
-2. Open **SQL Editor**.
-3. Run [`supabase/schema.sql`](supabase/schema.sql).
-4. Run [`supabase/functional_features.sql`](supabase/functional_features.sql).
-5. If the project already existed before the Icon Picker update, run [`supabase/icon_name_migration.sql`](supabase/icon_name_migration.sql).
-6. Run [`supabase/bundle_migration.sql`](supabase/bundle_migration.sql) to add `products.is_bundle`, `bundle_items`, RLS, and the composite stock trigger.
-7. Confirm the seeded outlets, suppliers, products, and `products.icon_name` values exist.
+- Admin: product, bundle, supplier, and purchase-order management plus sales-history reads.
+- Kasir: product/bundle reads, POS checkout, and access only to their own sales.
+- Both roles: profile self-read; no client operation can change a profile role.
 
-Do not insert rows directly into `auth.users`. After the schema setup, provision the demo users with the official Auth Admin API:
+The older SQL files in `supabase/` are retained. The app bootstrap in `scripts/db-setup.js` uses a different legacy schema shape, so do not run both bootstrap paths on the same fresh database without reviewing their existing tables first.
 
-```bash
-export SUPABASE_URL="https://YOUR_PROJECT.supabase.co"
-export SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVER_ONLY_SERVICE_ROLE_KEY"
+## 2. Create Supabase Auth users
+
+Provision users with the existing Admin API setup script, not from browser code:
+
+```text
+SUPABASE_URL=https://PROJECT_ID.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=server-only-key
 pnpm auth:seed
-unset SUPABASE_SERVICE_ROLE_KEY
 ```
 
-This creates `admin@kopipintar.com` / `adminkopipintar` and `kasir@kopipintar.com` / `kasirkopipintar`, confirms their emails, and writes their IDs to `profiles`.
+The script creates `admin@kopipintar.com` / `adminkopipintar` and `kasir@kopipintar.com` / `kasirkopipintar`, and writes each user's role to `profiles`. The service-role key is for this local provisioning step only. Never set it as a `VITE_*` variable or add it to Vercel.
 
-The schema includes users, outlets, outlet memberships, products, purchase orders, purchase-order items, suppliers, sales transactions, and transaction items. Row Level Security is enabled; the Node server uses the service-role key and performs protected queries server-side.
+## 3. Configure local or Vercel frontend
 
-After setup, the following actions persist to Supabase: POS checkout and stock deduction, inventory adjustment, product creation, supplier creation, purchase-order creation, and purchase-order status changes. Stock deduction is performed by the database trigger after a `sale_items` insert. For a bundle sale, the trigger leaves the bundle product unchanged and deducts each component according to its configured quantity in `bundle_items`.
+Set only:
 
-## 2. Configure the server
-
-Copy the ZIP contents to your host and set these server environment variables:
-
-```bash
-NODE_ENV=production
-PORT=3000
-SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
-VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
-JWT_SECRET=your-long-random-secret
-VITE_APP_ID=your-manus-app-id
-VITE_OAUTH_PORTAL_URL=https://oauth.manus.im
-OAUTH_SERVER_URL=https://oauth.manus.im
-OWNER_OPEN_ID=your-owner-open-id
-OWNER_NAME=Your Name
+```text
+VITE_SUPABASE_URL=https://PROJECT_ID.supabase.co
+VITE_SUPABASE_ANON_KEY=your-public-anon-key
 ```
 
-The app supports Google Auth through Supabase Auth as an additional browser login. Enable **Authentication → Providers → Google**, add your Google OAuth Client ID/Secret, and configure the deployed URL plus `http://localhost:3000` under **Authentication → URL Configuration → Redirect URLs**. Then use **Settings → Masuk dengan Google**.
+Vercel settings:
 
-Manus OAuth remains available as a legacy login path. Supabase is the persistent application data backend. For fully private production endpoints, add Supabase Auth JWT verification to the server and tighten RLS policies.
+- **Build Command:** `pnpm build`
+- **Output Directory:** `dist/public`
 
-Read [`DATABASE_DARI_NOL.md`](DATABASE_DARI_NOL.md) for the beginner setup guide.
+The existing `vercel.json` sends unmatched routes to `/index.html`.
 
-## 3. Run locally
+## 4. Local quality checks
 
 ```bash
 pnpm install
 pnpm check
 pnpm test
 pnpm build
-pnpm start
 ```
 
-The server serves the built frontend and exposes the typed tRPC API under `/api/trpc`.
-
-## 4. Deploy
-
-Use any Node 22 host that supports a long-running Express process:
-
-- Build command: `pnpm install --frozen-lockfile && pnpm build`
-- Start command: `pnpm start`
-- Health check: `/`
-- Set the environment variables above in the host dashboard.
-
-For a static-only host, deploy the `dist/public` folder, but the backend features will not work there; use a Node host for the complete app. The included `vercel.json` provides SPA rewrites for the frontend preview. Vercel static output alone does not run the Express/tRPC server, so Supabase-backed checkout, inventory writes, and server-side AI require the Node deployment described above or separate serverless API functions.
+The optional Google button uses Supabase Auth's Google provider. Configure its provider and redirect URLs in Supabase if you want to enable it.

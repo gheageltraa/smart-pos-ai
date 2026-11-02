@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { startLogin } from "@/const";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
+import type { User } from "@supabase/supabase-js";
 import {
   adjustSupabaseProductStock,
   createSupabaseSale,
   getCurrentProfile,
+  insertSupabasePurchaseOrder,
   insertSupabaseProduct,
+  insertSupabaseSupplier,
   isSupabaseAuthConfigured,
+  listSupabasePurchaseOrders,
   listSupabaseProducts,
+  listSupabaseSuppliers,
   signInWithUsername,
   supabase,
+  type KopipintarProfile,
+  updateSupabasePurchaseOrderStatus,
 } from "@/lib/supabase";
 import {
   AlertCircle,
@@ -1457,7 +1461,6 @@ function POS({
   setProducts,
   onToast,
   onTransaction,
-  isAuthenticated,
   hasSupabaseSession,
   outletId,
 }: {
@@ -1465,7 +1468,6 @@ function POS({
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   onToast: (toast: Toast) => void;
   onTransaction: (total: number) => void | Promise<void>;
-  isAuthenticated: boolean;
   hasSupabaseSession: boolean;
   outletId: number;
 }) {
@@ -1488,16 +1490,12 @@ function POS({
     change: number;
     note: string;
   } | null>(null);
-  const paymentSession = trpc.integrations.paymentSession.useMutation();
-  const createSale = trpc.sales.create.useMutation();
-  const barcodeLookup = trpc.integrations.barcodeLookup.useQuery(
-    { code: "USB-SCANNER-READY" },
-    { enabled: false }
-  );
+  const [isSaving, setIsSaving] = useState(false);
   const filtered = products.filter(
     product =>
       (category === "Semua" || product.category === category) &&
-      product.name.toLowerCase().includes(query.toLowerCase())
+      (product.name.toLowerCase().includes(query.toLowerCase()) ||
+        product.sku.toLowerCase().includes(query.toLowerCase()))
   );
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
   const tax = Math.round(subtotal * 0.1);
@@ -1565,6 +1563,7 @@ function POS({
     onToast({ tone: "info", message: "Keranjang berhasil dikosongkan." });
   };
   const pay = async () => {
+    if (isSaving) return;
     if (!cart.length)
       return onToast({
         tone: "warning",
@@ -1575,42 +1574,20 @@ function POS({
         tone: "warning",
         message: `Uang tunai kurang ${money(total - cashReceived)}.`,
       });
-    if (isAuthenticated) {
-      try {
-        await paymentSession.mutateAsync({
-          total,
-          method: payment as "QRIS" | "Tunai" | "Debit",
-        });
-      } catch {
-        return onToast({
-          tone: "warning",
-          message: "Payment gateway belum aktif untuk outlet ini.",
-        });
-      }
-    }
+    setIsSaving(true);
     try {
       const saleInput = {
         outletId,
         paymentMethod: payment as "QRIS" | "Tunai" | "Debit",
-        subtotal,
-        tax,
-        total,
+        cashReceived: selectedCash,
         items: cart.map(item => ({
           productId: item.id,
-          productName: item.name,
           qty: item.qty,
-          unitPrice: item.price,
-          unitCost: item.cost,
         })),
       };
-      let transactionNumber = `KBP-${Date.now().toString().slice(-8)}`;
-      if (isSupabaseAuthConfigured && hasSupabaseSession) {
-        const result = await createSupabaseSale(saleInput);
-        transactionNumber = result.transactionNumber;
-      } else {
-        const result = await createSale.mutateAsync(saleInput);
-        transactionNumber = result?.transactionNumber || transactionNumber;
-      }
+      if (!isSupabaseAuthConfigured || !hasSupabaseSession)
+        throw new Error("Login Supabase diperlukan untuk menyimpan transaksi.");
+      const sale = await createSupabaseSale(saleInput);
       setProducts(current =>
         current.map(product => {
           const directItem = cart.find(cartItem => cartItem.id === product.id);
@@ -1631,24 +1608,29 @@ function POS({
               };
         })
       );
-      onTransaction(total);
+      onTransaction(sale.total);
       setReceipt({
-        transactionNumber,
+        transactionNumber: sale.transactionNumber,
         items: cart,
-        subtotal,
-        tax,
-        total,
+        subtotal: sale.subtotal,
+        tax: sale.tax,
+        total: sale.total,
         payment,
         cashReceived: selectedCash,
-        change,
+        change: calculateChange(sale.total, selectedCash),
         note,
       });
       setCartOpen(false);
-    } catch {
+    } catch (error) {
       return onToast({
         tone: "warning",
-        message: "Transaksi gagal disimpan. Periksa koneksi backend.",
+        message:
+          error instanceof Error
+            ? `Transaksi gagal disimpan: ${error.message}`
+            : "Transaksi gagal disimpan. Periksa koneksi Supabase.",
       });
+    } finally {
+      setIsSaving(false);
     }
   };
   const finishTransaction = async () => {
@@ -1847,16 +1829,17 @@ function POS({
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-gray-500 sm:text-xs">
         <span className="live-dot" />{" "}
-        {isAuthenticated || hasSupabaseSession
-          ? "Payment adapter aktif"
-          : "Payment adapter siap dikonfigurasi"}
+        {hasSupabaseSession
+          ? "Checkout Supabase siap"
+          : "Login Supabase diperlukan"}
       </div>
       <button
         className="button button-primary mt-3 w-full justify-center transition-all duration-300 active:scale-[.98]"
         onClick={pay}
-        disabled={createSale.isPending || paymentSession.isPending}
+        disabled={isSaving}
       >
-        Bayar {money(total)} <ChevronRight size={16} />
+        {isSaving ? "Menyimpan..." : `Bayar ${money(total)}`}{" "}
+        <ChevronRight size={16} />
       </button>
     </aside>
   );
@@ -1886,13 +1869,11 @@ function POS({
             <button
               className="button button-secondary shrink-0"
               onClick={() =>
-                barcodeLookup.refetch().then(() =>
-                  onToast({
-                    tone: "success",
-                    message:
-                      "Barcode gateway siap — hubungkan scanner USB/Bluetooth untuk lookup otomatis.",
-                  })
-                )
+                onToast({
+                  tone: "info",
+                  message:
+                    "Gunakan scanner barcode USB/Bluetooth dalam mode keyboard, lalu cari kode produk.",
+                })
               }
             >
               Scan barcode
@@ -2131,27 +2112,26 @@ function Inventory({
           ? getRisk(product) === "Tinggi"
           : getRisk(product) === filter))
   );
-  const adjustMutation = trpc.inventory.adjust.useMutation();
-  const saveProduct = trpc.inventory.upsert.useMutation();
   const adjustStock = async (product: Product, amount: number) => {
+    if (!canWriteSupabase)
+      return onToast({
+        tone: "warning",
+        message: "Hanya Admin yang dapat mengubah inventory.",
+      });
     if (product.isBundle)
       return onToast({
         tone: "info",
         message: "Stok paket mengikuti ketersediaan komponen.",
       });
     try {
-      if (isSupabaseAuthConfigured && canWriteSupabase)
-        await adjustSupabaseProductStock(product.id, outletId, amount);
-      else
-        await adjustMutation.mutateAsync({
-          outletId,
-          productId: product.id,
-          amount,
-        });
-    } catch {
+      await adjustSupabaseProductStock(product.id, outletId, amount);
+    } catch (error) {
       return onToast({
         tone: "warning",
-        message: "Stok belum tersimpan ke backend.",
+        message:
+          error instanceof Error
+            ? `Stok belum tersimpan: ${error.message}`
+            : "Stok belum tersimpan ke Supabase.",
       });
     }
     setProducts(current =>
@@ -2370,40 +2350,38 @@ function Inventory({
             setEditing(null);
           }}
           onAdd={async product => {
-            try {
-              if (isSupabaseAuthConfigured)
-                await insertSupabaseProduct({
-                  ...product,
-                  outlet_id: outletId,
-                  min_stock: product.minStock,
-                  daily_sales: product.dailySales,
-                  icon_name: product.iconName,
-                  is_bundle: Boolean(product.isBundle),
-                  bundle_items: product.bundleItems || [],
-                });
-              else await saveProduct.mutateAsync({ ...product, outletId });
-            } catch {
+            if (!canWriteSupabase)
               return onToast({
                 tone: "warning",
-                message: "Produk belum tersimpan ke backend.",
+                message: "Hanya Admin yang dapat mengubah inventory.",
+              });
+            try {
+              const saved = await insertSupabaseProduct({
+                ...product,
+                outlet_id: outletId,
+                min_stock: product.minStock,
+                daily_sales: product.dailySales,
+                icon_name: product.iconName,
+                is_bundle: Boolean(product.isBundle),
+                bundle_items: product.bundleItems || [],
+              });
+              const savedProduct = mapSupabaseProduct(saved);
+              setProducts(current =>
+                product.id
+                  ? current.map(item =>
+                      item.id === product.id ? savedProduct : item
+                    )
+                  : [...current, savedProduct]
+              );
+            } catch (error) {
+              return onToast({
+                tone: "warning",
+                message:
+                  error instanceof Error
+                    ? `Produk belum tersimpan: ${error.message}`
+                    : "Produk belum tersimpan ke Supabase.",
               });
             }
-            setProducts(current => {
-              const next = product.id
-                ? current.map(item =>
-                    item.id === product.id
-                      ? { ...item, ...product, id: item.id }
-                      : item
-                  )
-                : [
-                    ...current,
-                    {
-                      ...product,
-                      id: Math.max(0, ...current.map(item => item.id)) + 1,
-                    },
-                  ];
-              return next;
-            });
             setShowAdd(false);
             setEditing(null);
             onToast({
@@ -2769,7 +2747,7 @@ function Forecast({
       riskyProducts[0] ||
       products[0]
   );
-  const aiExplain = trpc.forecast.explain.useMutation();
+  const [analysis, setAnalysis] = useState<string | null>(null);
   return (
     <>
       <PageTitle
@@ -2998,32 +2976,24 @@ function Forecast({
               <p>Menjaga stock coverage selama ±7 hari ke depan.</p>
             </div>
           </div>
-          {aiExplain.data && (
+          {analysis && (
             <div className="ai-provider-response">
               <Sparkles size={14} />
               <span>
-                <b>AI provider:</b> {aiExplain.data.text}
+                <b>Analisis forecast:</b> {analysis}
               </span>
             </div>
           )}
           <div className="forecast-detail-actions">
             <button
               className="button button-secondary"
-              disabled={aiExplain.isPending}
               onClick={() =>
-                aiExplain.mutate({
-                  product: selected.name,
-                  unit: selected.unit,
-                  stock: selected.stock,
-                  dailySales: selected.dailySales,
-                  trend: selected.trend,
-                  supplier: selected.supplier,
-                  leadTimeDays: 3,
-                })
+                setAnalysis(
+                  `${selected.name} diperkirakan bertahan ${Math.max(0, Math.ceil(getCoverage(selected)))} hari dengan tren penjualan ${selected.trend >= 0 ? "naik" : "turun"} ${Math.abs(selected.trend)}%.`
+                )
               }
             >
-              <Sparkles size={15} />{" "}
-              {aiExplain.isPending ? "Menganalisis..." : "Minta analisis AI"}
+              <Sparkles size={15} /> Tampilkan analisis
             </button>
             <button
               className="button button-primary"
@@ -3198,63 +3168,47 @@ function Orders({
 }
 
 function Suppliers({ onToast }: { onToast: (toast: Toast) => void }) {
-  const fallback = [
-    {
-      name: "PT Coffee Supply",
-      contact: "Rizky Pratama",
-      products: "5 produk",
-      lead: "3 hari",
-      status: "Aktif",
-      initials: "CS",
-    },
-    {
-      name: "Green Tea Co.",
-      contact: "Maya Kusuma",
-      products: "3 produk",
-      lead: "5 hari",
-      status: "Aktif",
-      initials: "GT",
-    },
-    {
-      name: "Bakehouse Jakarta",
-      contact: "Dimas Haryono",
-      products: "4 produk",
-      lead: "2 hari",
-      status: "Aktif",
-      initials: "BJ",
-    },
-    {
-      name: "FreshMart Supply",
-      contact: "Santi Dewi",
-      products: "2 produk",
-      lead: "1 hari",
-      status: "Aktif",
-      initials: "FM",
-    },
-    {
-      name: "Mixology Goods",
-      contact: "Fajar Nugroho",
-      products: "2 produk",
-      lead: "4 hari",
-      status: "Review",
-      initials: "MG",
-    },
-  ];
-  const supplierQuery = trpc.suppliers.list.useQuery(undefined, {
-    retry: false,
-  });
-  const createSupplier = trpc.suppliers.create.useMutation();
-  const suppliers = supplierQuery.data?.length
-    ? supplierQuery.data.map(item => ({
-        name: item.name,
-        contact: item.contact,
-        products: "-",
-        lead: `${item.lead_time_days} hari`,
-        status: item.status,
-        initials: item.name.slice(0, 2).toUpperCase(),
-        phone: item.phone,
-      }))
-    : fallback;
+  const [suppliers, setSuppliers] = useState<
+    Array<{
+      name: string;
+      contact: string;
+      products: string;
+      lead: string;
+      status: string;
+      initials: string;
+      phone: string;
+    }>
+  >([]);
+  useEffect(() => {
+    let active = true;
+    listSupabaseSuppliers()
+      .then(rows => {
+        if (active)
+          setSuppliers(
+            rows.map(item => ({
+              name: item.name,
+              contact: item.contact,
+              products: "-",
+              lead: `${item.lead_time_days} hari`,
+              status: item.status,
+              initials: item.name.slice(0, 2).toUpperCase(),
+              phone: item.phone,
+            }))
+          );
+      })
+      .catch(error =>
+        onToast({
+          tone: "warning",
+          message:
+            error instanceof Error
+              ? `Supplier gagal dimuat: ${error.message}`
+              : "Supplier gagal dimuat dari Supabase.",
+        })
+      );
+    return () => {
+      active = false;
+    };
+  }, []);
   const addSupplier = async () => {
     const name = window.prompt("Nama supplier baru");
     if (!name) return;
@@ -3262,19 +3216,33 @@ function Suppliers({ onToast }: { onToast: (toast: Toast) => void }) {
       window.prompt("Nama kontak supplier", "PIC Supplier") || "PIC Supplier";
     const phone = window.prompt("Nomor telepon", "+62") || "+62";
     try {
-      await createSupplier.mutateAsync({
+      const created = await insertSupabaseSupplier({
         name,
         contact,
         phone,
-        leadTimeDays: 3,
+        lead_time_days: 3,
         status: "Aktif",
       });
-      supplierQuery.refetch();
+      setSuppliers(current => [
+        ...current,
+        {
+          name: created.name,
+          contact: created.contact,
+          products: "-",
+          lead: `${created.lead_time_days} hari`,
+          status: created.status,
+          initials: created.name.slice(0, 2).toUpperCase(),
+          phone: created.phone,
+        },
+      ]);
       onToast({ tone: "success", message: `${name} berhasil ditambahkan.` });
-    } catch {
+    } catch (error) {
       onToast({
         tone: "warning",
-        message: "Supplier belum tersimpan ke backend.",
+        message:
+          error instanceof Error
+            ? `Supplier belum tersimpan: ${error.message}`
+            : "Supplier belum tersimpan ke Supabase.",
       });
     }
   };
@@ -3746,12 +3714,12 @@ function ForecastQuickModal({
 
 function SettingsPage({
   onToast,
-  googleUser,
+  authUser,
   onGoogleLogin,
   onGoogleLogout,
 }: {
   onToast: (toast: Toast) => void;
-  googleUser: any;
+  authUser: User | null;
   onGoogleLogin: () => void;
   onGoogleLogout: () => void;
 }) {
@@ -3842,12 +3810,12 @@ function SettingsPage({
         <section className="panel" style={{ padding: 22 }}>
           <div className="panel-header min-w-0 flex-wrap">
             <div>
-              <h2>Google Auth</h2>
-              <p>Login Google menggunakan Supabase Auth.</p>
+              <h2>Supabase Auth</h2>
+              <p>Akun operator yang saat ini masuk.</p>
             </div>
             <Users size={20} className="muted-icon" />
           </div>
-          {googleUser ? (
+          {authUser ? (
             <div
               style={{
                 display: "flex",
@@ -3858,17 +3826,19 @@ function SettingsPage({
             >
               <div className="profile-avatar">
                 {(
-                  googleUser.user_metadata?.full_name ||
-                  googleUser.email ||
+                  authUser.user_metadata?.full_name ||
+                  authUser.email ||
                   "G"
                 )
                   .slice(0, 2)
                   .toUpperCase()}
               </div>
               <div style={{ flex: 1 }}>
-                <b>{googleUser.user_metadata?.full_name || "Google account"}</b>
+                <b>
+                  {authUser.user_metadata?.full_name || "Operator"}
+                </b>
                 <br />
-                <small>{googleUser.email}</small>
+                <small>{authUser.email}</small>
               </div>
               <button
                 className="button button-secondary"
@@ -3915,8 +3885,9 @@ function SettingsPage({
             <Boxes size={20} className="muted-icon" />
           </div>
           <p>
-            Service role key hanya di server. Untuk langkah setup database dari
-            nol, baca file <b>DATABASE_DARI_NOL.md</b>.
+            Service role key hanya diperlukan saat setup akun dan tidak boleh
+            masuk ke browser. Baca <b>DATABASE_DARI_NOL.md</b> untuk panduan
+            database dan deployment static.
           </p>
           <button
             className="button button-secondary"
@@ -3947,7 +3918,7 @@ function HelpCenter({
     {
       id: "database",
       q: "Bagaimana menghubungkan Supabase?",
-      a: "Buat project Supabase, jalankan dua SQL file di folder supabase, lalu isi SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY di server.",
+      a: "Siapkan tabel Supabase, jalankan supabase/static_frontend.sql, lalu set VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY pada frontend.",
     },
     {
       id: "product",
@@ -4124,7 +4095,6 @@ function NotificationPanel({
 }
 
 export default function Home() {
-  const auth = useAuth();
   const [activePage, setActivePage] = useState<PageKey>("dashboard");
   const [products, setProducts] = useState<Product[]>(() => {
     try {
@@ -4149,49 +4119,11 @@ export default function Home() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [forecastProduct, setForecastProduct] = useState<Product | null>(null);
-  const [googleUser, setGoogleUser] = useState<any>(null);
-  const [profile, setProfile] = useState<{
-    username: string;
-    full_name: string | null;
-    role: "admin" | "kasir";
-  } | null>(null);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<KopipintarProfile | null>(null);
   const [selectedOutletId, setSelectedOutletId] = useState(1);
   const [supabaseLoading, setSupabaseLoading] = useState(false);
-  const workspaceQuery = trpc.workspace.me.useQuery(undefined, {
-    enabled: auth.isAuthenticated,
-    retry: false,
-  });
-  const inventoryInput = useMemo(
-    () => ({ outletId: selectedOutletId }),
-    [selectedOutletId]
-  );
-  const inventoryQuery = trpc.inventory.list.useQuery(inventoryInput, {
-    retry: false,
-  });
-  const refreshProducts = useCallback(async () => {
-    if (isSupabaseAuthConfigured) {
-      setSupabaseLoading(true);
-      try {
-        const rows = await listSupabaseProducts(selectedOutletId);
-        if (rows.length) setProducts(rows.map(mapSupabaseProduct));
-      } catch {
-        showToast({
-          tone: "warning",
-          message: "Data live belum dapat dimuat ulang.",
-        });
-      } finally {
-        setSupabaseLoading(false);
-      }
-      return;
-    }
-    await inventoryQuery.refetch();
-  }, [inventoryQuery.refetch, selectedOutletId]);
-  const ordersQuery = trpc.orders.list.useQuery(inventoryInput, {
-    retry: false,
-  });
-  const createOrderMutation = trpc.orders.create.useMutation();
-  const updateOrderMutation = trpc.orders.updateStatus.useMutation();
-  const outlets: OutletOption[] = workspaceQuery.data?.outlets || [
+  const outlets: OutletOption[] = [
     {
       id: 1,
       name: "Kedai Bumi",
@@ -4214,6 +4146,33 @@ export default function Home() {
       active: 1,
     },
   ];
+  const refreshProducts = useCallback(async () => {
+    if (!isSupabaseAuthConfigured) {
+      showToast({
+        tone: "warning",
+        message: "Isi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.",
+      });
+      return;
+    }
+    setSupabaseLoading(true);
+    try {
+      const rows = await listSupabaseProducts(
+        selectedOutletId,
+        profile?.role === "admin"
+      );
+      setProducts(rows.map(mapSupabaseProduct));
+    } catch (error) {
+      showToast({
+        tone: "warning",
+        message:
+          error instanceof Error
+            ? `Data inventory gagal dimuat: ${error.message}`
+            : "Data inventory gagal dimuat dari Supabase.",
+      });
+    } finally {
+      setSupabaseLoading(false);
+    }
+  }, [profile?.role, selectedOutletId]);
   useEffect(() => {
     localStorage.setItem("smart-pos-products", JSON.stringify(products));
   }, [products]);
@@ -4221,35 +4180,39 @@ export default function Home() {
     localStorage.setItem("smart-pos-orders", JSON.stringify(orders));
   }, [orders]);
   useEffect(() => {
-    if (
-      workspaceQuery.data?.outlets[0] &&
-      !workspaceQuery.data.outlets.some(
-        outlet => outlet.id === selectedOutletId
-      )
-    )
-      setSelectedOutletId(workspaceQuery.data.outlets[0].id);
-  }, [workspaceQuery.data, selectedOutletId]);
-  useEffect(() => {
-    if (!isSupabaseAuthConfigured && inventoryQuery.data?.length)
-      setProducts(inventoryQuery.data as Product[]);
-  }, [inventoryQuery.data]);
-  useEffect(() => {
-    if (ordersQuery.data?.length)
-      setOrders(
-        ordersQuery.data.map((order: any) => ({
-          id: String(order.order_number || order.id),
-          supplier: order.supplier,
-          product: order.product_name || "Multiple items",
-          qty: Number(order.qty || 1),
-          unit: order.unit || "pcs",
-          unitCost: Number(order.unit_cost || 0),
-          total: Number(order.total || 0),
-          reason: order.reason || "Purchase order tersimpan di backend",
-          status: order.status,
-          created: new Date(order.created_at).toLocaleDateString("id-ID"),
-        }))
+    if (!supabase || !authUser) return;
+    let active = true;
+    listSupabasePurchaseOrders(selectedOutletId)
+      .then(rows => {
+        if (active)
+          setOrders(
+            rows.map(order => ({
+              id: order.order_number,
+              supplier: order.supplier,
+              product: order.product_name,
+              qty: Number(order.qty),
+              unit: order.unit,
+              unitCost: Number(order.unit_cost),
+              total: Number(order.total),
+              reason: order.reason,
+              status: order.status,
+              created: new Date(order.created_at).toLocaleDateString("id-ID"),
+            }))
+          );
+      })
+      .catch(error =>
+        showToast({
+          tone: "warning",
+          message:
+            error instanceof Error
+              ? `Purchase order gagal dimuat: ${error.message}`
+              : "Purchase order gagal dimuat dari Supabase.",
+        })
       );
-  }, [ordersQuery.data]);
+    return () => {
+      active = false;
+    };
+  }, [authUser, selectedOutletId]);
   const showToast = (next: Toast) => {
     setToast(next);
     window.setTimeout(() => setToast(null), 3000);
@@ -4276,12 +4239,24 @@ export default function Home() {
         message: `Login berhasil, tetapi profile/RLS gagal dibaca: ${message}`,
       });
     };
-    supabase.auth.getUser().then(({ data }) => setGoogleUser(data.user));
-    getCurrentProfile().then(setProfile).catch(profileFailure);
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (error) throw error;
+        const user = data.session?.user ?? null;
+        setAuthUser(user);
+        if (user) return getCurrentProfile().then(setProfile);
+        setProfile(null);
+      })
+      .catch(profileFailure);
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        setGoogleUser(session?.user || null);
-        if (session) getCurrentProfile().then(setProfile).catch(profileFailure);
+        setAuthUser(session?.user || null);
+        if (session)
+          window.setTimeout(
+            () => getCurrentProfile().then(setProfile).catch(profileFailure),
+            0
+          );
         else setProfile(null);
       }
     );
@@ -4322,27 +4297,26 @@ export default function Home() {
       });
     }
     const reason = `Forecast menunjukkan stok akan habis dalam ${Math.max(1, Math.ceil(getCoverage(product)))} hari.`;
-    let createdId = `PO-2409-${String(orders.length + 3).padStart(3, "0")}`;
+    let createdId: string;
     try {
-      const created = await createOrderMutation.mutateAsync({
-        outletId: selectedOutletId,
+      const created = await insertSupabasePurchaseOrder({
+        outlet_id: selectedOutletId,
         supplier: product.supplier,
-        productId: product.id,
-        product: product.name,
+        product_id: product.id,
+        product_name: product.name,
         qty,
         unit: product.unit,
-        unitCost: product.cost,
+        unit_cost: product.cost,
         reason,
       });
-      createdId = String(
-        (created as { orderNumber?: string; id?: number }).orderNumber ||
-          (created as { id?: number }).id ||
-          createdId
-      );
-    } catch {
+      createdId = created.order_number;
+    } catch (error) {
       return showToast({
         tone: "warning",
-        message: "Draft gagal disimpan ke backend.",
+        message:
+          error instanceof Error
+            ? `Draft gagal disimpan: ${error.message}`
+            : "Draft gagal disimpan ke Supabase.",
       });
     }
     setOrders(current => [
@@ -4356,7 +4330,7 @@ export default function Home() {
         total: qty * product.cost,
         reason,
         status: "Draft",
-        created: "19 Sep 2024",
+        created: new Date().toLocaleDateString("id-ID"),
       },
       ...current,
     ]);
@@ -4367,8 +4341,9 @@ export default function Home() {
       message: `Draft pesanan ${product.name} berhasil dibuat.`,
     });
   };
+  const effectivePage = profile?.role === "admin" ? activePage : "pos";
   const content = useMemo(() => {
-    if (activePage === "dashboard")
+    if (effectivePage === "dashboard")
       return (
         <Dashboard
           products={products}
@@ -4377,7 +4352,7 @@ export default function Home() {
           onToast={showToast}
         />
       );
-    if (activePage === "pos")
+    if (effectivePage === "pos")
       return (
         <POS
           products={products}
@@ -4392,21 +4367,20 @@ export default function Home() {
                 "Penjualan tercatat. Dashboard dan AI Forecast sudah diperbarui.",
             });
           }}
-          isAuthenticated={auth.isAuthenticated}
-          hasSupabaseSession={Boolean(googleUser)}
+          hasSupabaseSession={Boolean(authUser)}
         />
       );
-    if (activePage === "inventory")
+    if (effectivePage === "inventory")
       return (
         <Inventory
           products={products}
           setProducts={setProducts}
           outletId={selectedOutletId}
           onToast={showToast}
-          canWriteSupabase={Boolean(googleUser && profile?.role === "admin")}
+          canWriteSupabase={profile?.role === "admin"}
         />
       );
-    if (activePage === "forecast")
+    if (effectivePage === "forecast")
       return (
         <Forecast
           products={products}
@@ -4414,7 +4388,7 @@ export default function Home() {
           onToast={showToast}
         />
       );
-    if (activePage === "orders")
+    if (effectivePage === "orders")
       return (
         <Orders
           onCreateDraft={() =>
@@ -4426,11 +4400,18 @@ export default function Home() {
           orders={orders}
           onConfirm={async id => {
             try {
-              await updateOrderMutation.mutateAsync({ id, status: "Ordered" });
-            } catch {
+              await updateSupabasePurchaseOrderStatus(
+                id,
+                selectedOutletId,
+                "Ordered"
+              );
+            } catch (error) {
               return showToast({
                 tone: "warning",
-                message: "Status order gagal disimpan.",
+                message:
+                  error instanceof Error
+                    ? `Status order gagal disimpan: ${error.message}`
+                    : "Status order gagal disimpan ke Supabase.",
               });
             }
             setOrders(current =>
@@ -4446,59 +4427,65 @@ export default function Home() {
           onToast={showToast}
         />
       );
-    if (activePage === "suppliers") return <Suppliers onToast={showToast} />;
-    if (activePage === "settings")
+    if (effectivePage === "suppliers") return <Suppliers onToast={showToast} />;
+    if (effectivePage === "settings")
       return (
         <SettingsPage
           onToast={showToast}
-          googleUser={googleUser}
+          authUser={authUser}
           onGoogleLogin={googleLogin}
           onGoogleLogout={googleLogout}
         />
       );
-    if (activePage === "help")
+    if (effectivePage === "help")
       return <HelpCenter onToast={showToast} onNavigate={setActivePage} />;
     return <Reports onToast={showToast} />;
   }, [
-    activePage,
+    effectivePage,
     products,
     orders,
-    auth.isAuthenticated,
-    googleUser,
+    authUser,
     refreshProducts,
+    selectedOutletId,
   ]);
   const currentUser =
-    auth.user ||
-    (googleUser
+    authUser
       ? {
           name:
             profile?.full_name ||
-            googleUser.user_metadata?.full_name ||
-            googleUser.email,
-          email: googleUser.email,
-          role: profile?.role || "admin",
+            authUser.user_metadata?.full_name ||
+            authUser.email,
+          email: authUser.email,
+          role: profile?.role || "pending",
         }
-      : null);
+      : null;
   const openAuthenticatedWorkspace = () => setActivePage("dashboard");
   useEffect(() => {
-    if (profile?.role === "kasir" && activePage !== "pos") setActivePage("pos");
-  }, [profile?.role, activePage]);
+    if (authUser && profile?.role === "kasir" && activePage !== "pos")
+      setActivePage("pos");
+  }, [authUser, profile?.role, activePage]);
   const handleLogout = async () => {
     try {
-      if (supabase) await supabase.auth.signOut();
-      if (auth.isAuthenticated) await auth.logout();
-    } finally {
-      setGoogleUser(null);
-      setProfile(null);
+      if (!supabase) throw new Error("Supabase belum dikonfigurasi.");
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
       setNotificationsOpen(false);
       setActivePage("dashboard");
       showToast({
         tone: "success",
         message: "Anda sudah keluar. Silakan login kembali.",
       });
+    } catch (error) {
+      showToast({
+        tone: "warning",
+        message:
+          error instanceof Error
+            ? `Logout gagal: ${error.message}`
+            : "Logout gagal melalui Supabase Auth.",
+      });
     }
   };
-  if (!auth.isAuthenticated && !googleUser)
+  if (!authUser)
     return (
       <AuthLanding
         onAuthenticated={openAuthenticatedWorkspace}
@@ -4506,10 +4493,30 @@ export default function Home() {
         onToast={showToast}
       />
     );
+  if (profile?.role !== "admin" && profile?.role !== "kasir")
+    return (
+      <div className="min-h-screen bg-[var(--canvas)] px-4 py-12">
+        <section className="mx-auto max-w-lg rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-8 text-center shadow-sm">
+          <h1 className="text-xl font-semibold text-[var(--ink)]">
+            Akun menunggu persetujuan
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-[var(--ink-soft)]">
+            Login berhasil, tetapi akun ini belum memiliki role Kopipintar yang
+            disetujui. Hubungi administrator untuk meminta akses.
+          </p>
+          <button
+            className="button button-secondary mt-6 justify-center"
+            onClick={() => void handleLogout()}
+          >
+            Keluar
+          </button>
+        </section>
+      </div>
+    );
   return (
     <div className="shell-wrap">
       <AppShell
-        activePage={activePage}
+        activePage={effectivePage}
         setActivePage={setActivePage}
         onNotifications={() => setNotificationsOpen(current => !current)}
         outlets={outlets}

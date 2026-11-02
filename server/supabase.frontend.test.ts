@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 describe("frontend Supabase configuration", () => {
-  it("can reach the REST API with the supplied anon key", async () => {
-    const url = process.env.VITE_SUPABASE_URL;
-    const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+  const url = process.env.VITE_SUPABASE_URL;
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+  it.skipIf(!url || !anonKey)(
+    "can reach the REST API with the supplied anon key",
+    async () => {
     expect(url).toBeTruthy();
     expect(anonKey).toBeTruthy();
 
@@ -11,5 +14,7 @@ describe("frontend Supabase configuration", () => {
       headers: { apikey: anonKey!, Authorization: `Bearer ${anonKey}` },
     });
     expect(response.ok).toBe(true);
-  }, 15_000);
+    },
+    15_000,
+  );
 });

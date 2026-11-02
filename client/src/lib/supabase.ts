@@ -14,7 +14,7 @@ export const supabase = isSupabaseAuthConfigured
     })
   : null;
 
-export type KopipintarRole = "admin" | "kasir";
+export type KopipintarRole = "admin" | "kasir" | "pending";
 export type KopipintarProfile = {
   id: string;
   username: string;
@@ -77,7 +77,10 @@ function requireClient() {
   return supabase;
 }
 
-export async function listSupabaseProducts(outletId: number) {
+export async function listSupabaseProducts(
+  outletId: number,
+  includeSalesHistory = true
+) {
   const client = requireClient();
   const { data, error } = await client
     .from("products")
@@ -86,13 +89,15 @@ export async function listSupabaseProducts(outletId: number) {
     .order("name");
   if (error) throw error;
   const products = (data || []) as SupabaseProduct[];
-  const { data: bundleItems } = await client
+  if (!products.length) return products;
+  const { data: bundleItems, error: bundleError } = await client
     .from("bundle_items")
     .select("bundle_product_id, component_product_id, quantity")
     .in(
       "bundle_product_id",
       products.map(product => product.id)
     );
+  if (bundleError) throw bundleError;
   const bundleMap = new Map<
     number,
     Array<{ component_product_id: number; quantity: number }>
@@ -107,6 +112,7 @@ export async function listSupabaseProducts(outletId: number) {
   }
   for (const product of products)
     product.bundle_items = bundleMap.get(product.id) || [];
+  if (!includeSalesHistory) return products;
   const since = new Date();
   since.setDate(since.getDate() - 30);
   const { data: sales, error: salesError } = await client
@@ -114,13 +120,14 @@ export async function listSupabaseProducts(outletId: number) {
     .select("id, created_at")
     .eq("outlet_id", outletId)
     .gte("created_at", since.toISOString());
-  if (salesError || !sales?.length) return products;
+  if (salesError) throw salesError;
+  if (!sales?.length) return products;
   const saleIds = sales.map(sale => sale.id);
   const { data: items, error: itemsError } = await client
     .from("sale_items")
     .select("product_id, qty")
     .in("sale_id", saleIds);
-  if (itemsError) return products;
+  if (itemsError) throw itemsError;
   const totals = new Map<number, number>();
   for (const item of items || [])
     totals.set(
@@ -145,10 +152,11 @@ export async function listSupabaseProducts(outletId: number) {
       )
       .map(sale => sale.id)
   );
-  const { data: trendItems } = await client
+  const { data: trendItems, error: trendError } = await client
     .from("sale_items")
     .select("sale_id, product_id, qty")
     .in("sale_id", saleIds);
+  if (trendError) throw trendError;
   const currentTotals = new Map<number, number>();
   const previousTotals = new Map<number, number>();
   for (const item of trendItems || []) {
@@ -210,7 +218,11 @@ export async function insertSupabaseProduct(
     : client.from("products").insert(values);
   const { data, error } = await query.select("*").single();
   if (error) throw error;
-  await client.from("bundle_items").delete().eq("bundle_product_id", data.id);
+  const { error: deleteBundleError } = await client
+    .from("bundle_items")
+    .delete()
+    .eq("bundle_product_id", data.id);
+  if (deleteBundleError) throw deleteBundleError;
   if (input.is_bundle && input.bundle_items?.length) {
     const { error: bundleError } = await client.from("bundle_items").insert(
       input.bundle_items.map(item => ({
@@ -253,47 +265,144 @@ export async function adjustSupabaseProductStock(
 export async function createSupabaseSale(input: {
   outletId: number;
   paymentMethod: "QRIS" | "Tunai" | "Debit";
-  subtotal: number;
-  tax: number;
-  total: number;
+  cashReceived: number;
   items: Array<{
     productId: number;
-    productName: string;
     qty: number;
-    unitPrice: number;
-    unitCost: number;
   }>;
 }) {
   const client = requireClient();
-  const transactionNumber = `KBP-${Date.now().toString().slice(-8)}`;
-  const { data: sale, error: saleError } = await client
-    .from("sales")
-    .insert({
-      transaction_number: transactionNumber,
-      outlet_id: input.outletId,
-      payment_method: input.paymentMethod,
-      subtotal: input.subtotal,
-      tax: input.tax,
-      total: input.total,
-    })
-    .select("id, transaction_number")
-    .single();
-  if (saleError) throw saleError;
-  const { error: itemsError } = await client.from("sale_items").insert(
-    input.items.map(item => ({
-      sale_id: sale.id,
-      product_id: item.productId,
-      product_name: item.productName,
+  const transactionNumber = `KBP-${Date.now()}-${crypto.randomUUID().slice(0, 6)}`;
+  const { data, error } = await client.rpc("create_pos_sale", {
+    p_outlet_id: input.outletId,
+    p_transaction_number: transactionNumber,
+    p_payment_method: input.paymentMethod,
+    p_cash_received: input.cashReceived,
+    p_items: input.items.map(item => ({
+      productId: item.productId,
       qty: item.qty,
-      unit_price: item.unitPrice,
-      unit_cost: item.unitCost,
-      line_total: item.qty * item.unitPrice,
-    }))
-  );
-  if (itemsError) throw itemsError;
+    })),
+  });
+  if (error) throw error;
+  if (
+    !data ||
+    typeof data.transaction_number !== "string" ||
+    typeof data.subtotal !== "number" ||
+    typeof data.tax !== "number" ||
+    typeof data.total !== "number"
+  ) {
+    throw new Error("Supabase returned an invalid sale receipt.");
+  }
   return {
-    transactionNumber: sale.transaction_number,
-    total: input.total,
+    transactionNumber: data.transaction_number,
+    subtotal: data.subtotal,
+    tax: data.tax,
+    total: data.total,
     provider: "supabase" as const,
   };
+}
+
+export type SupabaseSupplier = {
+  id: number;
+  name: string;
+  contact: string;
+  phone: string;
+  lead_time_days: number;
+  status: string;
+};
+
+export async function listSupabaseSuppliers() {
+  const { data, error } = await requireClient()
+    .from("suppliers")
+    .select("id, name, contact, phone, lead_time_days, status")
+    .order("name");
+  if (error) throw error;
+  return (data || []) as SupabaseSupplier[];
+}
+
+export async function insertSupabaseSupplier(input: {
+  name: string;
+  contact: string;
+  phone: string;
+  lead_time_days: number;
+  status: string;
+}) {
+  const { data, error } = await requireClient()
+    .from("suppliers")
+    .insert(input)
+    .select("id, name, contact, phone, lead_time_days, status")
+    .single();
+  if (error) throw error;
+  return data as SupabaseSupplier;
+}
+
+export type SupabasePurchaseOrder = {
+  id: number;
+  order_number: string;
+  outlet_id: number;
+  supplier: string;
+  product_id: number | null;
+  product_name: string;
+  qty: number;
+  unit: string;
+  unit_cost: number;
+  total: number;
+  reason: string;
+  status: "Draft" | "Ordered" | "Received";
+  created_at: string;
+};
+
+export async function listSupabasePurchaseOrders(outletId: number) {
+  const { data, error } = await requireClient()
+    .from("purchase_orders")
+    .select(
+      "id, order_number, outlet_id, supplier, product_id, product_name, qty, unit, unit_cost, total, reason, status, created_at"
+    )
+    .eq("outlet_id", outletId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data || []) as SupabasePurchaseOrder[];
+}
+
+export async function insertSupabasePurchaseOrder(input: {
+  outlet_id: number;
+  supplier: string;
+  product_id: number;
+  product_name: string;
+  qty: number;
+  unit: string;
+  unit_cost: number;
+  reason: string;
+}) {
+  const orderNumber = `PO-${Date.now()}-${crypto.randomUUID().slice(0, 6)}`;
+  const { data, error } = await requireClient()
+    .from("purchase_orders")
+    .insert({
+      ...input,
+      order_number: orderNumber,
+      total: input.qty * input.unit_cost,
+      status: "Draft",
+    })
+    .select(
+      "id, order_number, outlet_id, supplier, product_id, product_name, qty, unit, unit_cost, total, reason, status, created_at"
+    )
+    .single();
+  if (error) throw error;
+  return data as SupabasePurchaseOrder;
+}
+
+export async function updateSupabasePurchaseOrderStatus(
+  orderNumber: string,
+  outletId: number,
+  status: SupabasePurchaseOrder["status"]
+) {
+  const { data, error } = await requireClient()
+    .from("purchase_orders")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("order_number", orderNumber)
+    .eq("outlet_id", outletId)
+    .select("order_number")
+    .single();
+  if (error) throw error;
+  return data;
 }

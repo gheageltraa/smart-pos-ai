@@ -1,74 +1,52 @@
 # Kopipintar — Smart POS & AI Inventory Forecast
 
-Kopipintar adalah sistem operasi ringan untuk UMKM kedai kopi. Aplikasi menggabungkan POS, inventory, purchase order, laporan, dan AI Forecast agar pemilik kedai dapat mengambil keputusan restock berdasarkan data transaksi, bukan intuisi semata.
+Kopipintar is a static Vite/React application for coffee-shop POS, inventory, purchase orders, and stock forecasting. The browser uses Supabase Auth and `@supabase/supabase-js` directly; the deployed app does not run an Express or tRPC server.
 
-## Demo
+## Roles
 
-- **Website:** gunakan checkpoint WebDev project ini atau deploy hasil ZIP secara mandiri.
-- **Akun admin:** `admin` / `adminkopipintar`
-- **Akun kasir:** `kasir` / `kasirkopipintar`
+- **Admin:** Dashboard, POS, Inventory, Forecast, Purchase Orders, Suppliers, Reports, Settings, and Help.
+- **Kasir:** POS only.
 
-Akun `admin` dapat mengakses Dashboard, POS, Inventory, AI Forecast, Purchase Order, Supplier, Reports, Settings, dan Help Center. Akun `kasir` hanya mendapatkan akses POS/Kasir.
+The UI role comes from `profiles.role`; PostgreSQL Row Level Security must be enabled using [`supabase/static_frontend.sql`](supabase/static_frontend.sql).
 
-## Tech stack & arsitektur
+## Stack and data flow
 
-- **Frontend:** Vite, React, TypeScript, Tailwind CSS, Recharts, Lucide React.
-- **Data & Auth:** Supabase Auth, Supabase PostgreSQL, Row Level Security.
-- **Backend:** tRPC/Express fallback adapter untuk deployment yang memakai server runtime.
-- **Database logic:** PostgreSQL trigger `sale_item_decrements_stock` otomatis mengurangi `products.stock` setiap `sale_items` dibuat.
-- **Deployment:** ZIP self-hostable; frontend memakai `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY`.
+- **Frontend:** Vite, React 19, TypeScript, Tailwind CSS, Recharts, and Lucide.
+- **Auth and data:** Supabase Auth, PostgreSQL, RLS, and `@supabase/supabase-js`.
+- **Checkout:** The browser calls the `create_pos_sale` PostgreSQL function. It validates stock and prices, writes the sale and its items atomically, and the database trigger reduces stock.
+- **Forecast:** Inventory and (for Admin) sales history are read from Supabase; the explanation is calculated in the browser.
+- **Reports:** Current report charts and financial totals are sample UI data, not live Supabase reports.
 
-Alurnya: browser membaca session Supabase → profile menentukan role → RLS membatasi operasi → POS membuat `sales` dan `sale_items` → trigger database mengurangi stock → Forecast membaca histori transaksi.
+## Run locally
 
-## AI Forecasting
-
-Forecast menghitung **Average Daily Sales** dari transaksi historis 30 hari. Rumus sederhananya:
-
-```text
-Average Daily Sales = total quantity terjual 30 hari / 30
-Stock Coverage = stock saat ini / Average Daily Sales
-Predicted Stockout Date = hari ini + ceil(Stock Coverage)
-```
-
-Risk level ditentukan dari stock coverage dan minimum stock. Detail forecast menampilkan alasan dalam bahasa sederhana, contoh: “Penjualan rata-rata 4 kg/hari, stok 12 kg, maka diprediksi habis dalam 3 hari. Risk: HIGH.” Tren 7 hari terakhir dan lead time supplier membantu menentukan rekomendasi jumlah restock.
-
-## Fitur utama
-
-1. Login username/email dengan Supabase Auth.
-2. RBAC admin/kasir dan RLS database.
-3. POS tablet: search, kategori, product card, cart, quantity, tax, Cash/QRIS/Debit, checkout.
-4. Inventory CRUD dan stock adjustment.
-5. AI Forecast dengan explainability.
-6. Purchase Draft dengan supplier, jumlah rekomendasi, harga estimasi, alasan, dan status Draft/Ordered/Received.
-7. Reports dengan chart tren penjualan, produk terlaris, Profit & Loss, dan Export CSV.
-8. Settings, Help Center, multi-outlet demo, dan mode demo.
-
-## Menjalankan lokal
+Set the two public frontend variables, then run:
 
 ```bash
 pnpm install
-export VITE_SUPABASE_URL="https://PROJECT_ID.supabase.co"
-export VITE_SUPABASE_ANON_KEY="public-anon-key"
-export SUPABASE_DB_URL="postgresql://..."
-pnpm db:setup
+pnpm dev
 pnpm check
 pnpm test
 pnpm build
-pnpm start
 ```
 
-Jangan pernah menaruh `SUPABASE_DB_URL`, database password, atau service-role key ke `VITE_*`, browser, atau repository publik.
+The production frontend is emitted to `dist/public`. Login requires valid Supabase Auth accounts and profiles.
 
-## Struktur data
+## Supabase setup
 
-- `profiles`: username, nama, dan role pengguna.
-- `categories`: kategori produk.
-- `products`: SKU, stok, harga, supplier, daily sales, dan trend.
-- `suppliers`: kontak supplier dan lead time.
-- `sales`: header transaksi.
-- `sale_items`: item transaksi dan sumber trigger stok.
-- `purchase_orders`: draft/order restock.
+For a new demo database, `pnpm db:setup` bootstraps and seeds tables and requires `SUPABASE_DB_URL` only in the setup environment. Then run [`supabase/static_frontend.sql`](supabase/static_frontend.sql) in the Supabase SQL Editor and provision accounts with `pnpm auth:seed`. The account provisioning script requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the local setup environment only.
 
-## Batasan prototype
+For existing databases, preserve existing data and apply the migration after confirming the app tables exist. The older SQL files in `supabase/` remain available; do not combine incompatible schema bootstraps.
 
-Payment gateway masih berupa adapter demo; integrasi QRIS/debit produksi memerlukan provider dan credential resmi. RLS sudah role-aware untuk demo, tetapi deployment multi-outlet produksi sebaiknya menambah membership per outlet dan audit log.
+## Vercel
+
+- **Build Command:** `pnpm build`
+- **Output Directory:** `dist/public`
+
+Set only these frontend environment variables in Vercel:
+
+```text
+VITE_SUPABASE_URL=https://PROJECT_ID.supabase.co
+VITE_SUPABASE_ANON_KEY=your-public-anon-key
+```
+
+Never put a service-role key, database URL/password, or other secret in a `VITE_*` variable or browser code. RLS—not the anon key—protects database access.

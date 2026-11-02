@@ -46,7 +46,7 @@ async function setup() {
         id uuid primary key references auth.users(id) on delete cascade,
         username text not null unique,
         full_name text,
-        role text not null default 'kasir' check (role in ('admin','kasir')),
+        role text not null default 'pending' check (role in ('pending','admin','kasir')),
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
       );
