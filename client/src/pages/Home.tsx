@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import {
   adjustSupabaseProductStock,
@@ -766,6 +766,7 @@ function POS({
   categoryNames,
   taxRate,
   outletName,
+  footerText,
   productLoading,
   productError,
   taxRateError,
@@ -781,6 +782,7 @@ function POS({
   categoryNames: string[];
   taxRate: number | null;
   outletName: string;
+  footerText: string;
   productLoading: boolean;
   productError: string | null;
   taxRateError: string | null;
@@ -790,6 +792,7 @@ function POS({
   const [cart, setCart] = useState<CartItem[]>([]);
   const [category, setCategory] = useState("Semua");
   const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [payment, setPayment] = useState("QRIS");
   const [cashReceived, setCashReceived] = useState(0);
   const [note, setNote] = useState("");
@@ -805,6 +808,7 @@ function POS({
     cashReceived: number;
     change: number;
     note: string;
+    footerText: string;
   } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const filtered = products.filter(
@@ -858,6 +862,21 @@ function POS({
     setBouncingId(product.id);
     window.setTimeout(() => setBouncingId(null), 260);
     playBeep();
+  };
+  const scanBySku = (rawCode: string) => {
+    const code = rawCode.trim().toLowerCase();
+    if (!code) return;
+    const matches = products.filter(product => product.sku.trim().toLowerCase() === code);
+    if (matches.length !== 1) {
+      onToast({
+        tone: "warning",
+        message: matches.length ? `SKU ${rawCode} digunakan oleh beberapa produk.` : `Produk dengan SKU ${rawCode} tidak ditemukan.`,
+      });
+      return;
+    }
+    setCategory("Semua");
+    setQuery("");
+    addToCart(matches[0]);
   };
   const changeQty = (id: number, amount: number) =>
     setCart(current =>
@@ -940,6 +959,7 @@ function POS({
         cashReceived: selectedCash,
         change: calculateChange(sale.total, selectedCash),
         note,
+        footerText,
       });
       setCartOpen(false);
     } catch (error) {
@@ -1185,20 +1205,24 @@ function POS({
             <div className="search-box flex-1">
               <Search size={17} />
               <input
+                ref={searchInputRef}
                 placeholder="Cari produk atau SKU..."
                 value={query}
                 onChange={event => setQuery(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key !== "Enter" || !event.currentTarget.value.trim()) return;
+                  event.preventDefault();
+                  scanBySku(event.currentTarget.value);
+                }}
               />
             </div>
             <button
               className="button button-secondary shrink-0"
-              onClick={() =>
-                onToast({
-                  tone: "info",
-                  message:
-                    "Gunakan scanner barcode USB/Bluetooth dalam mode keyboard, lalu cari kode produk.",
-                })
-              }
+              onClick={() => {
+                setCategory("Semua");
+                searchInputRef.current?.focus();
+                onToast({ tone: "info", message: "Scanner siap. Scan barcode SKU lalu tekan Enter." });
+              }}
             >
               Scan barcode
             </button>
@@ -1309,6 +1333,7 @@ function SuccessModal({
     cashReceived: number;
     change: number;
     note: string;
+    footerText: string;
   };
   onClose: () => void;
 }) {
@@ -1389,7 +1414,7 @@ function SuccessModal({
             )}
           </div>
           <p className="mt-4 text-center text-[10px]">
-            Terima kasih sudah berkunjung!
+            {receipt.footerText}
           </p>
         </div>
         <div className="receipt-actions">
@@ -2301,6 +2326,9 @@ function SettingsPage({
   taxRate,
   onGoogleLogin,
   onGoogleLogout,
+  receiptFooter,
+  onReceiptFooterChange,
+  dataStatus,
 }: {
   onToast: (toast: Toast) => void;
   authUser: User | null;
@@ -2309,12 +2337,10 @@ function SettingsPage({
   taxRate: number | null;
   onGoogleLogin: () => void;
   onGoogleLogout: () => void;
+  receiptFooter: string;
+  onReceiptFooterChange: (value: string) => void;
+  dataStatus: "loading" | "live" | "error";
 }) {
-  const [receiptFooter, setReceiptFooter] = useState(
-    () =>
-      localStorage.getItem("kopipintar-receipt-footer") ||
-      "Terima kasih sudah berkunjung!"
-  );
   const save = () => {
     localStorage.setItem("kopipintar-receipt-footer", receiptFooter);
     onToast({ tone: "success", message: "Pengaturan berhasil disimpan." });
@@ -2365,7 +2391,7 @@ function SettingsPage({
             <input
               className="select-control"
               value={receiptFooter}
-              onChange={event => setReceiptFooter(event.target.value)}
+              onChange={event => onReceiptFooterChange(event.target.value)}
             />
           </label>
           <label
@@ -2454,30 +2480,18 @@ function SettingsPage({
         >
           <div className="panel-header min-w-0 flex-wrap">
             <div>
-              <h2>Data & deployment</h2>
-              <p>
-                Supabase menyimpan inventory, transaksi, supplier, dan purchase
-                order.
-              </p>
+              <h2>Penyimpanan data</h2>
+              <p>Status sinkronisasi untuk outlet yang sedang dipilih.</p>
             </div>
             <Boxes size={20} className="muted-icon" />
           </div>
-          <p>
-            Kredensial setup harus tetap berada di environment lokal dan tidak
-            boleh masuk ke browser. Baca <b>docs/DATABASE_DARI_NOL.md</b> untuk panduan
-            database dan deployment static.
+          <p style={{ marginTop: 16 }}>
+            {dataStatus === "live"
+              ? "Data outlet tersinkron dan siap digunakan."
+              : dataStatus === "error"
+                ? "Sebagian data gagal dimuat. Coba muat ulang atau hubungi admin."
+                : "Sedang memuat data outlet..."}
           </p>
-          <button
-            className="button button-secondary"
-            onClick={() =>
-              onToast({
-                tone: "info",
-                message: "Gunakan docs/DATABASE_DARI_NOL.md untuk setup Supabase.",
-              })
-            }
-          >
-            Lihat panduan database
-          </button>
         </section>
       </div>
     </>
@@ -2671,6 +2685,9 @@ export default function Home() {
   const [taxRateLoaded, setTaxRateLoaded] = useState(false);
   const [taxRateError, setTaxRateError] = useState<string | null>(null);
   const [taxRetry, setTaxRetry] = useState(0);
+  const [receiptFooter, setReceiptFooter] = useState(
+    () => localStorage.getItem("kopipintar-receipt-footer") || "Terima kasih sudah berkunjung!"
+  );
 
   const showToast = useCallback((next: Toast) => {
     setToast(next);
@@ -3001,7 +3018,7 @@ export default function Home() {
   } else if (effectivePage === "dashboard") {
     content = <DashboardLive products={productsForUi} outletId={selectedOutletId} outletName={selectedOutlet ? `${selectedOutlet.name} - ${selectedOutlet.city}` : ""} userName={displayName} productLoading={supabaseLoading} productError={productError} onRetryProducts={refreshProducts} onPage={setActivePage} onForecast={product => { setForecastProductId(product.id); setActivePage("forecast"); }} />;
   } else if (effectivePage === "pos") {
-    content = <POS products={productsForUi} setProducts={setProducts} outletId={selectedOutletId} onToast={showToast} onTransaction={async () => { await refreshProducts(); showToast({ tone: "success", message: "Penjualan tercatat dan stok diperbarui dari Supabase." }); }} hasSupabaseSession={Boolean(authUser)} categoryNames={categoryOptions.map(item => item.name)} taxRate={taxRate} outletName={selectedOutlet?.name || ""} productLoading={supabaseLoading} productError={productError} taxRateError={taxRateError} onRefreshProducts={refreshProducts} onRetryTaxRate={() => setTaxRetry(current => current + 1)} />;
+    content = <POS products={productsForUi} setProducts={setProducts} outletId={selectedOutletId} onToast={showToast} onTransaction={async () => { await refreshProducts(); showToast({ tone: "success", message: "Penjualan tercatat dan stok diperbarui dari Supabase." }); }} hasSupabaseSession={Boolean(authUser)} categoryNames={categoryOptions.map(item => item.name)} taxRate={taxRate} outletName={selectedOutlet?.name || ""} footerText={receiptFooter} productLoading={supabaseLoading} productError={productError} taxRateError={taxRateError} onRefreshProducts={refreshProducts} onRetryTaxRate={() => setTaxRetry(current => current + 1)} />;
   } else if (effectivePage === "inventory") {
     content = <Inventory products={productsForUi} setProducts={setProducts} outletId={selectedOutletId} onToast={showToast} canWriteSupabase={profile?.role === "admin"} categoryOptions={categoryOptions} supplierOptions={supplierRecords} loading={supabaseLoading} loadError={productError} onRefresh={refreshProducts} />;
   } else if (effectivePage === "forecast") {
@@ -3011,7 +3028,7 @@ export default function Home() {
   } else if (effectivePage === "suppliers") {
     content = <SuppliersLive products={productsForUi} onToast={showToast} />;
   } else if (effectivePage === "settings") {
-    content = <SettingsPage onToast={showToast} authUser={authUser} displayName={displayName} outlet={selectedOutlet} taxRate={taxRate} onGoogleLogin={googleLogin} onGoogleLogout={googleLogout} />;
+    content = <SettingsPage onToast={showToast} authUser={authUser} displayName={displayName} outlet={selectedOutlet} taxRate={taxRate} onGoogleLogin={googleLogin} onGoogleLogout={googleLogout} receiptFooter={receiptFooter} onReceiptFooterChange={setReceiptFooter} dataStatus={dataStatus} />;
   } else if (effectivePage === "help") {
     content = <HelpCenter onToast={showToast} onNavigate={setActivePage} />;
   } else {
