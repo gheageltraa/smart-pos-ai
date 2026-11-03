@@ -6,7 +6,7 @@ Kopipintar is built as a static Vite frontend. Authentication and application da
 
 For a new demo database, bootstrap the app tables and sample data with `pnpm db:setup`. This one-time script requires a direct Supabase PostgreSQL connection string in `SUPABASE_DB_URL`; do not set it in Vercel or the browser.
 
-Run [`../supabase/static_frontend.sql`](../supabase/static_frontend.sql) in the Supabase SQL Editor after the app tables exist. It adds the direct-client RLS policies and the atomic `create_pos_sale` function. It permits:
+After the app tables exist, run [`../supabase/static_frontend.sql`](../supabase/static_frontend.sql), followed by [`../supabase/reporting.sql`](../supabase/reporting.sql), in the Supabase SQL Editor. The first file adds direct-client RLS policies and atomic checkout. The reporting migration adds live dashboard/reporting views and one-time atomic PO receipt. Optionally run `../supabase/seed_demo_sales.sql` last only when marked demo history is needed.
 
 - Admin: product, bundle, supplier, and purchase-order management plus sales-history reads.
 - Kasir: product/bundle reads, POS checkout, and access only to their own sales.

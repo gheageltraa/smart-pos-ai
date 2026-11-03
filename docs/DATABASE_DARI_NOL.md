@@ -4,7 +4,7 @@
 
 1. Buat project di Supabase.
 2. Untuk database demo baru, jalankan `pnpm db:setup` dengan `SUPABASE_DB_URL` hanya di environment lokal/setup. Script ini membuat tabel aplikasi dan mengisi data demo.
-3. Jalankan [`supabase/static_frontend.sql`](../supabase/static_frontend.sql) di Supabase SQL Editor setelah tabel aplikasi tersedia.
+3. Jalankan [`supabase/static_frontend.sql`](../supabase/static_frontend.sql), lalu [`supabase/reporting.sql`](../supabase/reporting.sql) di Supabase SQL Editor setelah tabel aplikasi tersedia.
 4. Provision akun demo lewat `pnpm auth:seed` dengan `SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY` hanya di terminal lokal. Script membuat akun Admin dan Kasir beserta `profiles.role`.
 5. Set variabel frontend di Vercel atau file lokal yang tidak di-commit:
 
@@ -24,6 +24,8 @@ Login menerima username atau email dan password lewat Supabase Auth. Remember Me
 User Auth baru mendapat role `pending` dan belum dapat mengakses data aplikasi. Administrator harus menyetujui akun dengan menetapkan role `kasir` atau `admin`.
 
 POS membuat transaksi melalui PostgreSQL function `create_pos_sale`, yang membaca harga dan stok aktual, menyimpan header serta item dalam satu transaksi, dan mengurangi stok melalui trigger. Inventory, supplier, dan purchase order diakses melalui Supabase langsung.
+
+Dashboard, laporan, dan forecast memakai transaksi serta stok aktual dari Supabase. Revenue/profit bundle tetap pada item bundle yang terjual; pemakaian komponen bundle ikut dihitung untuk forecast. SQL opsional `seed_demo_sales.sql` hanya untuk demo dan memberi prefix `DEMO-` pada transaksi yang dapat dihapus terpisah.
 
 ## Apa itu database dan Supabase?
 

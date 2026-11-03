@@ -14,8 +14,29 @@ import {
   signInWithUsername,
   supabase,
   type KopipintarProfile,
+  type SupabaseProduct,
   updateSupabasePurchaseOrderStatus,
+  updateSupabasePurchaseOrder,
+  deleteSupabasePurchaseOrder,
+  deleteSupabaseProduct,
+  deleteSupabaseSupplier,
+  getSupabaseTaxRate,
+  listSupabaseCategories,
+  listSupabaseOutlets,
+  receiveSupabasePurchaseOrder,
+  updateSupabaseSupplier,
+  type SupabaseCategory,
+  type SupabaseSupplier,
 } from "@/lib/supabase";
+import {
+  resolveDisplayName,
+} from "@/lib/datetime";
+import { calculateForecast } from "@/lib/analytics";
+import type { Product, PurchaseOrder } from "@/lib/models";
+import DashboardLive from "@/components/DashboardLive";
+import ReportsLive from "@/components/ReportsLive";
+import ForecastLive from "@/components/ForecastLive";
+import SuppliersLive from "@/components/SuppliersLive";
 import {
   AlertCircle,
   ArrowDownRight,
@@ -64,6 +85,7 @@ import {
   Soup,
   Milk,
   Citrus,
+  Pencil,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { calculateChange, canAddToCart, quickCashOptions } from "@shared/pos";
@@ -93,38 +115,7 @@ type PageKey =
 type Risk = "Tinggi" | "Sedang" | "Sehat" | "Habis";
 type OrderStatus = "Draft" | "Ordered" | "Received";
 
-type Product = {
-  id: number;
-  name: string;
-  sku: string;
-  category: string;
-  unit: string;
-  stock: number;
-  minStock: number;
-  cost: number;
-  price: number;
-  supplier: string;
-  dailySales: number;
-  trend: number;
-  emoji: string;
-  iconName: string | null;
-  isBundle?: boolean;
-  bundleItems?: Array<{ componentProductId: number; quantity: number }>;
-};
-
 type CartItem = Product & { qty: number };
-type PurchaseOrder = {
-  id: string;
-  supplier: string;
-  product: string;
-  qty: number;
-  unit: string;
-  unitCost: number;
-  total: number;
-  reason: string;
-  status: OrderStatus;
-  created: string;
-};
 
 type Toast = { tone: "success" | "info" | "warning"; message: string };
 type OutletOption = {
@@ -132,10 +123,9 @@ type OutletOption = {
   name: string;
   code: string;
   city: string;
-  active: number;
+  active: boolean;
 };
 
-const categories = ["Semua", "Kopi", "Non-kopi", "Makanan", "Minuman"];
 const navItems: {
   id: PageKey;
   label: string;
@@ -144,281 +134,11 @@ const navItems: {
 }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "pos", label: "POS / Kasir", icon: Calculator },
-  { id: "inventory", label: "Inventory", icon: Boxes, badge: "3" },
-  { id: "forecast", label: "AI Forecast", icon: Sparkles, badge: "AI" },
+  { id: "inventory", label: "Inventory", icon: Boxes },
+  { id: "forecast", label: "AI Forecast", icon: Sparkles },
   { id: "orders", label: "Purchase Order", icon: ClipboardList },
   { id: "suppliers", label: "Supplier", icon: Truck },
   { id: "reports", label: "Reports", icon: FileBarChart },
-];
-
-const initialProducts: Product[] = [
-  {
-    id: 1,
-    name: "Arabica Coffee",
-    sku: "COF-001",
-    category: "Kopi",
-    unit: "kg",
-    stock: 12,
-    minStock: 20,
-    cost: 120000,
-    price: 28500,
-    supplier: "PT Coffee Supply",
-    dailySales: 4,
-    trend: 18,
-    emoji: "☕",
-    iconName: "Coffee",
-  },
-  {
-    id: 2,
-    name: "Robusta Coffee",
-    sku: "COF-002",
-    category: "Kopi",
-    unit: "kg",
-    stock: 28,
-    minStock: 15,
-    cost: 88000,
-    price: 22000,
-    supplier: "PT Coffee Supply",
-    dailySales: 2.7,
-    trend: 8,
-    emoji: "☕",
-    iconName: "Coffee",
-  },
-  {
-    id: 3,
-    name: "Matcha Latte",
-    sku: "DRK-001",
-    category: "Non-kopi",
-    unit: "pack",
-    stock: 8,
-    minStock: 12,
-    cost: 35000,
-    price: 32000,
-    supplier: "Green Tea Co.",
-    dailySales: 2.1,
-    trend: 32,
-    emoji: "🍵",
-    iconName: "CupSoda",
-  },
-  {
-    id: 4,
-    name: "Cappuccino",
-    sku: "DRK-002",
-    category: "Kopi",
-    unit: "pack",
-    stock: 45,
-    minStock: 18,
-    cost: 15000,
-    price: 28000,
-    supplier: "PT Coffee Supply",
-    dailySales: 4.8,
-    trend: 14,
-    emoji: "☕",
-    iconName: "Coffee",
-  },
-  {
-    id: 5,
-    name: "Americano",
-    sku: "DRK-003",
-    category: "Kopi",
-    unit: "pack",
-    stock: 34,
-    minStock: 18,
-    cost: 12000,
-    price: 24000,
-    supplier: "PT Coffee Supply",
-    dailySales: 3.8,
-    trend: 6,
-    emoji: "🧊",
-    iconName: "GlassWater",
-  },
-  {
-    id: 6,
-    name: "Croissant Butter",
-    sku: "FOD-001",
-    category: "Makanan",
-    unit: "pcs",
-    stock: 18,
-    minStock: 12,
-    cost: 12500,
-    price: 26000,
-    supplier: "Bakehouse Jakarta",
-    dailySales: 2.4,
-    trend: 12,
-    emoji: "🥐",
-    iconName: "Croissant",
-  },
-  {
-    id: 7,
-    name: "Brownies Fudge",
-    sku: "FOD-002",
-    category: "Makanan",
-    unit: "pcs",
-    stock: 6,
-    minStock: 10,
-    cost: 10000,
-    price: 22000,
-    supplier: "Bakehouse Jakarta",
-    dailySales: 1.8,
-    trend: -4,
-    emoji: "🍫",
-    iconName: "CakeSlice",
-  },
-  {
-    id: 8,
-    name: "Mineral Water",
-    sku: "MIN-001",
-    category: "Minuman",
-    unit: "btl",
-    stock: 70,
-    minStock: 30,
-    cost: 3500,
-    price: 8000,
-    supplier: "FreshMart Supply",
-    dailySales: 6.1,
-    trend: 2,
-    emoji: "💧",
-    iconName: "GlassWater",
-  },
-  {
-    id: 9,
-    name: "Vanilla Syrup",
-    sku: "SYP-001",
-    category: "Non-kopi",
-    unit: "btl",
-    stock: 9,
-    minStock: 8,
-    cost: 75000,
-    price: 115000,
-    supplier: "Mixology Goods",
-    dailySales: 0.6,
-    trend: 5,
-    emoji: "🍯",
-    iconName: "CupSoda",
-  },
-  {
-    id: 10,
-    name: "Caramel Sauce",
-    sku: "SYP-002",
-    category: "Non-kopi",
-    unit: "btl",
-    stock: 15,
-    minStock: 8,
-    cost: 68000,
-    price: 105000,
-    supplier: "Mixology Goods",
-    dailySales: 0.7,
-    trend: 3,
-    emoji: "🍮",
-    iconName: "CakeSlice",
-  },
-  {
-    id: 11,
-    name: "Iced Chocolate",
-    sku: "DRK-004",
-    category: "Non-kopi",
-    unit: "pack",
-    stock: 22,
-    minStock: 14,
-    cost: 18000,
-    price: 30000,
-    supplier: "Green Tea Co.",
-    dailySales: 2.5,
-    trend: 11,
-    emoji: "🍫",
-    iconName: "CakeSlice",
-  },
-  {
-    id: 12,
-    name: "Pain au Chocolat",
-    sku: "FOD-003",
-    category: "Makanan",
-    unit: "pcs",
-    stock: 13,
-    minStock: 10,
-    cost: 14000,
-    price: 28000,
-    supplier: "Bakehouse Jakarta",
-    dailySales: 1.6,
-    trend: 3,
-    emoji: "🥖",
-    iconName: "Sandwich",
-  },
-  {
-    id: 13,
-    name: "Cold Brew",
-    sku: "DRK-005",
-    category: "Kopi",
-    unit: "btl",
-    stock: 24,
-    minStock: 12,
-    cost: 18000,
-    price: 32000,
-    supplier: "PT Coffee Supply",
-    dailySales: 2.9,
-    trend: 21,
-    emoji: "🫗",
-    iconName: "CupSoda",
-  },
-  {
-    id: 14,
-    name: "Espresso Blend",
-    sku: "COF-003",
-    category: "Kopi",
-    unit: "kg",
-    stock: 19,
-    minStock: 14,
-    cost: 135000,
-    price: 290000,
-    supplier: "PT Coffee Supply",
-    dailySales: 1.5,
-    trend: 9,
-    emoji: "☕",
-    iconName: "Coffee",
-  },
-  {
-    id: 15,
-    name: "Lemon Tea",
-    sku: "DRK-006",
-    category: "Non-kopi",
-    unit: "pack",
-    stock: 31,
-    minStock: 15,
-    cost: 9500,
-    price: 20000,
-    supplier: "Green Tea Co.",
-    dailySales: 2.4,
-    trend: 4,
-    emoji: "🍋",
-    iconName: "Citrus",
-  },
-];
-
-const initialOrders: PurchaseOrder[] = [
-  {
-    id: "PO-2409-001",
-    supplier: "Green Tea Co.",
-    product: "Matcha Latte",
-    qty: 15,
-    unit: "pack",
-    unitCost: 35000,
-    total: 525000,
-    reason: "Trend penjualan naik 32% minggu ini.",
-    status: "Ordered",
-    created: "18 Sep 2024",
-  },
-  {
-    id: "PO-2409-002",
-    supplier: "Bakehouse Jakarta",
-    product: "Brownies Fudge",
-    qty: 20,
-    unit: "pcs",
-    unitCost: 10000,
-    total: 200000,
-    reason: "Stok di bawah minimum stock.",
-    status: "Draft",
-    created: "19 Sep 2024",
-  },
 ];
 
 const money = (value: number) =>
@@ -431,7 +151,6 @@ const money = (value: number) =>
     .replace("Rp", "Rp ");
 const number = (value: number) =>
   new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 }).format(value);
-const todayLabel = "Kamis, 19 September 2024";
 
 const iconOptions = [
   { name: "Coffee", label: "Kopi", Icon: CoffeeIcon },
@@ -477,7 +196,7 @@ function ProductIcon({
   return <selected.Icon size={size} strokeWidth={1.8} aria-hidden="true" />;
 }
 
-function mapSupabaseProduct(row: any): Product {
+function mapSupabaseProduct(row: SupabaseProduct): Product {
   return {
     id: Number(row.id),
     name: row.name,
@@ -488,9 +207,12 @@ function mapSupabaseProduct(row: any): Product {
     minStock: Number(row.min_stock),
     cost: Number(row.cost),
     price: Number(row.price),
-    supplier: row.supplier || "Supplier belum diatur",
+    categoryId: row.category_id ? Number(row.category_id) : null,
+    supplier: row.supplier || "",
+    supplierLeadTimeDays: null,
     dailySales: Number(row.daily_sales || 0),
-    trend: Number(row.trend || 0),
+    historyDays: Number(row.history_days || 0),
+    trend: typeof row.trend === "number" ? row.trend : null,
     emoji: row.emoji || "📦",
     iconName: row.icon_name || null,
     isBundle: Boolean(row.is_bundle),
@@ -518,21 +240,18 @@ function downloadCsv(filename: string, rows: string[][]) {
 
 function getRisk(product: Product): Risk {
   if (product.stock === 0) return "Habis";
-  if (
-    getCoverage(product) <= 3 ||
-    product.stock <= Math.max(5, product.minStock * 0.65)
-  )
+  if (product.stock <= product.minStock / 2)
     return "Tinggi";
   if (product.stock <= product.minStock) return "Sedang";
   return "Sehat";
 }
 
 function getCoverage(product: Product) {
-  return product.dailySales ? product.stock / product.dailySales : 99;
+  return product.dailySales > 0 ? product.stock / product.dailySales : Infinity;
 }
 
 function getStockoutDate(product: Product) {
-  if (getCoverage(product) > 30) return "Aman >30 hari";
+  if (product.dailySales <= 0) return "Belum cukup data";
   const date = new Date();
   date.setDate(date.getDate() + Math.max(1, Math.ceil(getCoverage(product))));
   return date.toLocaleDateString("id-ID", {
@@ -837,6 +556,8 @@ function AppShell({
   onOutletChange,
   user,
   onLogout,
+  inventoryAttention,
+  dataStatus,
 }: {
   activePage: PageKey;
   setActivePage: (page: PageKey) => void;
@@ -847,6 +568,8 @@ function AppShell({
   onOutletChange: (id: number) => void;
   user: { name?: string | null; email?: string | null; role?: string } | null;
   onLogout: () => void;
+  inventoryAttention: number;
+  dataStatus: "loading" | "live" | "error";
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isCashier = user?.role === "kasir";
@@ -872,7 +595,9 @@ function AppShell({
           </button>
         </div>
         <div className="workspace-switcher">
-          <div className="workspace-avatar">KB</div>
+          <div className="workspace-avatar">
+            {outlets.find(outlet => outlet.id === selectedOutletId)?.code.slice(0, 2) || ""}
+          </div>
           <div className="workspace-copy">
             <select
               aria-label="Pilih outlet"
@@ -886,8 +611,7 @@ function AppShell({
               ))}
             </select>
             <span>
-              {outlets.find(outlet => outlet.id === selectedOutletId)?.city ||
-                "Outlet utama"}
+              {outlets.find(outlet => outlet.id === selectedOutletId)?.city || ""}
             </span>
           </div>
           <ChevronRight size={16} className="muted-icon" />
@@ -896,7 +620,9 @@ function AppShell({
         <nav className="main-nav">
           {navItems
             .filter(item => !isCashier || item.id === "pos")
-            .map(({ id, label, icon: NavIcon, badge }) => (
+            .map(({ id, label, icon: NavIcon }) => {
+              const badge = id === "inventory" ? String(inventoryAttention) : undefined;
+              return (
               <button
                 key={id}
                 onClick={() => {
@@ -909,13 +635,14 @@ function AppShell({
                 <span>{label}</span>
                 {badge && (
                   <span
-                    className={`nav-badge ${badge === "AI" ? "ai-badge" : ""}`}
+                    className="nav-badge"
                   >
                     {badge}
                   </span>
                 )}
               </button>
-            ))}
+              );
+            })}
         </nav>
         {!isCashier && (
           <div className="sidebar-footer">
@@ -938,11 +665,11 @@ function AppShell({
         )}
         <div className="sidebar-profile">
           <div className="profile-avatar">
-            {(user?.name || "AR").slice(0, 2).toUpperCase()}
+            {user?.name?.slice(0, 2).toUpperCase() || ""}
           </div>
           <div>
-            <b>{user?.name || "Operator"}</b>
-            <span>{user?.role === "admin" ? "Administrator" : "Cashier"}</span>
+            <b>{user?.name || "Pengguna"}</b>
+            <span>{user?.role === "admin" ? "Administrator" : user?.role === "kasir" ? "Kasir" : ""}</span>
           </div>
           <button className="profile-logout" onClick={onLogout}>
             {user ? "Keluar" : "Masuk"}
@@ -978,14 +705,14 @@ function AppShell({
             </b>
           </div>
           <div className="topbar-actions">
-            <span className="status-dot">
-              <span /> Semua sistem normal
+            <span className={`status-dot ${dataStatus}`}>
+              <span /> {dataStatus === "live" ? "Data Supabase" : dataStatus === "error" ? "Gagal memuat" : "Memuat..."}
             </span>
             <IconButton label="Notifikasi" onClick={onNotifications}>
               <Bell size={18} />
             </IconButton>
             <div className="topbar-avatar">
-              {(user?.name || "AR").slice(0, 2).toUpperCase()}
+              {user?.name?.slice(0, 2).toUpperCase() || ""}
             </div>
           </div>
         </header>
@@ -1018,439 +745,12 @@ function PageTitle({
   );
 }
 
-function MetricCard({
-  icon: CardIcon,
-  label,
-  value,
-  change,
-  positive = true,
-  note,
-  accent = "mint",
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  change: string;
-  positive?: boolean;
-  note: string;
-  accent?: "mint" | "blue" | "amber" | "violet";
-}) {
-  return (
-    <div className={`metric-card accent-${accent}`}>
-      <div className="metric-top">
-        <div className="metric-icon">
-          <CardIcon size={17} />
-        </div>
-        <span className={positive ? "change positive" : "change negative"}>
-          {positive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-          {change}
-        </span>
-      </div>
-      <div className="metric-label">{label}</div>
-      <div className="metric-value">{value}</div>
-      <div className="metric-note">{note}</div>
-    </div>
-  );
-}
-
-function SalesChart() {
-  const bars = [
-    44, 66, 52, 78, 60, 87, 69, 75, 58, 82, 70, 92, 76, 84, 63, 73, 88, 67, 91,
-    79, 95, 77, 84, 72, 89, 97, 82, 94, 87, 100,
-  ];
-  const labels = [
-    "21 Agu",
-    "25 Agu",
-    "29 Agu",
-    "02 Sep",
-    "06 Sep",
-    "10 Sep",
-    "14 Sep",
-    "19 Sep",
-  ];
-  return (
-    <div className="sales-chart">
-      <div className="chart-y-labels">
-        <span>Rp 5 jt</span>
-        <span>Rp 3,5 jt</span>
-        <span>Rp 2 jt</span>
-        <span>Rp 0</span>
-      </div>
-      <div className="chart-plot">
-        <div className="chart-grid">
-          <i />
-          <i />
-          <i />
-          <i />
-        </div>
-        <div className="chart-bars">
-          {bars.map((height, index) => (
-            <div key={index} className="chart-bar-wrap">
-              <div
-                className="chart-bar"
-                style={{
-                  height: `${height}%`,
-                  animationDelay: `${index * 12}ms`,
-                }}
-              />
-            </div>
-          ))}
-        </div>
-        <div className="chart-x-labels">
-          {labels.map(label => (
-            <span key={label}>{label}</span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Dashboard({
-  products,
-  setActivePage,
-  onForecast,
-  onToast,
-}: {
-  products: Product[];
-  setActivePage: (page: PageKey) => void;
-  onForecast: (product: Product) => void;
-  onToast: (toast: Toast) => void;
-}) {
-  const lowStock = products.filter(
-    product => getRisk(product) === "Tinggi" || getRisk(product) === "Sedang"
-  );
-  const topProducts = [...products]
-    .sort((a, b) => b.dailySales * b.price - a.dailySales * a.price)
-    .slice(0, 4);
-  const [period, setPeriod] = useState("30 hari");
-  return (
-    <>
-      <PageTitle
-        eyebrow={`OVERVIEW / ${todayLabel}`}
-        title="Selamat sore, Andi"
-        description="Pantau kesehatan bisnis Kedai Bumi dalam satu pandangan."
-        actions={
-          <>
-            <button
-              className="button button-secondary"
-              onClick={() =>
-                onToast({
-                  tone: "info",
-                  message: "Data dashboard sudah paling baru.",
-                })
-              }
-            >
-              <span className="live-dot" /> Data live
-            </button>
-            <button
-              className="button button-primary"
-              onClick={() => setActivePage("pos")}
-            >
-              <Plus size={16} /> Transaksi baru
-            </button>
-          </>
-        }
-      />
-      <div className="metric-grid">
-        <MetricCard
-          icon={BarChart3}
-          label="Penjualan hari ini"
-          value="Rp 4.850.000"
-          change="12,5%"
-          note="vs kemarin"
-          accent="mint"
-        />
-        <MetricCard
-          icon={ShoppingCart}
-          label="Total transaksi"
-          value="128"
-          change="8,2%"
-          note="vs kemarin"
-          accent="blue"
-        />
-        <MetricCard
-          icon={Zap}
-          label="Estimasi profit"
-          value="Rp 2.910.000"
-          change="14,8%"
-          note="margin 60%"
-          accent="amber"
-        />
-        <MetricCard
-          icon={PackagePlus}
-          label="Produk terjual"
-          value="486"
-          change="6,4%"
-          note="unit hari ini"
-          accent="violet"
-        />
-        <MetricCard
-          icon={AlertCircle}
-          label="Perlu perhatian"
-          value={`${lowStock.length} produk`}
-          change=""
-          positive={false}
-          note="cek rekomendasi AI"
-          accent="amber"
-        />
-      </div>
-      <div className="dashboard-grid top-grid">
-        <section className="panel chart-panel min-w-0">
-          <div className="panel-header min-w-0 flex-wrap">
-            <div>
-              <h2>Performa penjualan</h2>
-              <p>Revenue kotor dari semua channel</p>
-            </div>
-            <select
-              className="select-control"
-              value={period}
-              onChange={event => setPeriod(event.target.value)}
-            >
-              <option>7 hari</option>
-              <option>30 hari</option>
-              <option>90 hari</option>
-            </select>
-          </div>
-          <div className="chart-total min-w-0 flex-wrap gap-2">
-            <strong>
-              {period === "7 hari"
-                ? "Rp 28.400.000"
-                : period === "90 hari"
-                  ? "Rp 246.800.000"
-                  : "Rp 118.420.000"}
-            </strong>
-            <span className="positive-text">
-              <ArrowUpRight size={15} /> 12,5%
-            </span>
-            <span className="chart-muted">dari periode sebelumnya</span>
-          </div>
-          <SalesChart />
-        </section>
-        <section className="panel insight-panel min-w-0">
-          <div className="panel-header min-w-0 flex-wrap">
-            <div>
-              <div className="ai-kicker">
-                <span className="ai-spark">
-                  <Sparkles size={13} />
-                </span>{" "}
-                AI-POWERED ASSISTANT
-              </div>
-              <h2>3 hal yang butuh perhatian</h2>
-            </div>
-            <button
-              className="text-button"
-              onClick={() => setActivePage("forecast")}
-            >
-              Lihat semua <ChevronRight size={15} />
-            </button>
-          </div>
-          <div className="insight-list">
-            <button
-              className="insight-card insight-critical"
-              onClick={() =>
-                onForecast(
-                  products.find(product => product.name === "Arabica Coffee") ||
-                    products[0]
-                )
-              }
-            >
-              <span className="insight-icon">
-                <AlertCircle size={17} />
-              </span>
-              <span>
-                <b>Arabica Coffee akan habis 3 hari lagi</b>
-                <small>Stok 12 kg · penjualan naik 18%</small>
-              </span>
-              <ChevronRight size={17} />
-            </button>
-            <button
-              className="insight-card insight-positive"
-              onClick={() =>
-                onToast({
-                  tone: "success",
-                  message: "Matcha Latte ditandai sebagai produk rising.",
-                })
-              }
-            >
-              <span className="insight-icon">
-                <ArrowUpRight size={17} />
-              </span>
-              <span>
-                <b>Matcha Latte sedang naik daun</b>
-                <small>Permintaan naik 32% minggu ini</small>
-              </span>
-              <ChevronRight size={17} />
-            </button>
-            <button
-              className="insight-card insight-action"
-              onClick={() =>
-                onForecast(
-                  products.find(product => product.name === "Arabica Coffee") ||
-                    products[0]
-                )
-              }
-            >
-              <span className="insight-icon">
-                <Zap size={17} />
-              </span>
-              <span>
-                <b>Rekomendasi reorder tersedia</b>
-                <small>20 kg Arabica · estimasi Rp 2,4 jt</small>
-              </span>
-              <ChevronRight size={17} />
-            </button>
-          </div>
-          <div className="assistant-footer">
-            <span>
-              <Sparkles size={14} /> Estimasi berdasarkan 30+ hari data
-              transaksi
-            </span>
-            <button onClick={() => setActivePage("forecast")}>
-              Pelajari cara kerja
-            </button>
-          </div>
-        </section>
-      </div>
-      <div className="dashboard-grid bottom-grid">
-        <section className="panel">
-          <div className="panel-header min-w-0 flex-wrap">
-            <div>
-              <h2>Produk terlaris</h2>
-              <p>Kontributor revenue tertinggi hari ini</p>
-            </div>
-            <button
-              className="text-button"
-              onClick={() => setActivePage("reports")}
-            >
-              Lihat laporan <ChevronRight size={15} />
-            </button>
-          </div>
-          <div className="product-list">
-            {topProducts.map((product, index) => (
-              <div
-                className="product-row min-w-0 gap-2 sm:gap-3"
-                key={product.id}
-              >
-                <div className="rank">0{index + 1}</div>
-                <div className="product-emoji">
-                  <ProductIcon product={product} size={24} />
-                </div>
-                <div className="product-row-copy min-w-0">
-                  <b className="truncate text-[10px] sm:text-[11px]">
-                    {product.name}
-                  </b>
-                  <span>{number(product.dailySales * 10)} unit terjual</span>
-                </div>
-                <div className="product-revenue min-w-0 max-w-[40%] sm:min-w-[86px] sm:max-w-none">
-                  <b className="whitespace-nowrap text-[10px] sm:text-[11px]">
-                    {money(product.dailySales * product.price * 10)}
-                  </b>
-                  <span
-                    className={
-                      product.trend >= 0 ? "positive-text" : "negative-text"
-                    }
-                  >
-                    {product.trend >= 0 ? (
-                      <ArrowUpRight size={13} />
-                    ) : (
-                      <ArrowDownRight size={13} />
-                    )}
-                    {Math.abs(product.trend)}%
-                  </span>
-                </div>
-                <Sparkline points={[4, 7, 6, 8, 6 + index, 9, 11]} />
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="panel attention-panel">
-          <div className="panel-header min-w-0 flex-wrap">
-            <div>
-              <h2>Status inventory</h2>
-              <p>Ringkasan kesehatan stok</p>
-            </div>
-            <button
-              className="icon-button small"
-              onClick={() => setActivePage("inventory")}
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-          <div className="inventory-summary">
-            <div>
-              <span className="summary-number danger">
-                {
-                  products.filter(product => getRisk(product) === "Tinggi")
-                    .length
-                }
-              </span>
-              <span>Kritis</span>
-            </div>
-            <div>
-              <span className="summary-number warning">
-                {
-                  products.filter(product => getRisk(product) === "Sedang")
-                    .length
-                }
-              </span>
-              <span>Rendah</span>
-            </div>
-            <div>
-              <span className="summary-number success">
-                {
-                  products.filter(product => getRisk(product) === "Sehat")
-                    .length
-                }
-              </span>
-              <span>Sehat</span>
-            </div>
-          </div>
-          <div className="stock-progress">
-            <div className="progress-label">
-              <span>Rasio stok sehat</span>
-              <b>
-                {Math.round(
-                  (products.filter(product => getRisk(product) === "Sehat")
-                    .length /
-                    products.length) *
-                    100
-                )}
-                %
-              </b>
-            </div>
-            <div className="progress-track">
-              <span
-                style={{
-                  width: `${Math.round((products.filter(product => getRisk(product) === "Sehat").length / products.length) * 100)}%`,
-                }}
-              />
-            </div>
-            <small>Target minimal 80% untuk operasi optimal</small>
-          </div>
-          <div className="mini-alert">
-            <AlertCircle size={15} />
-            <span>
-              <b>Prioritas:</b> segera restock Arabica Coffee
-            </span>
-            <button onClick={() => setActivePage("forecast")}>
-              Tindakan <ChevronRight size={14} />
-            </button>
-          </div>
-        </section>
-      </div>
-    </>
-  );
-}
-
 function sellableStock(product: Product, products: Product[]) {
   if (!product.isBundle) return product.stock;
   if (!product.bundleItems?.length) return 0;
   return Math.min(
     ...product.bundleItems.map(item => {
-      const component = products.find(
-        candidate => candidate.id === item.componentProductId
-      );
+      const component = products.find(candidate => candidate.id === item.componentProductId);
       return component ? Math.floor(component.stock / item.quantity) : 0;
     })
   );
@@ -1463,6 +763,14 @@ function POS({
   onTransaction,
   hasSupabaseSession,
   outletId,
+  categoryNames,
+  taxRate,
+  outletName,
+  productLoading,
+  productError,
+  taxRateError,
+  onRefreshProducts,
+  onRetryTaxRate,
 }: {
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
@@ -1470,6 +778,14 @@ function POS({
   onTransaction: (total: number) => void | Promise<void>;
   hasSupabaseSession: boolean;
   outletId: number;
+  categoryNames: string[];
+  taxRate: number | null;
+  outletName: string;
+  productLoading: boolean;
+  productError: string | null;
+  taxRateError: string | null;
+  onRefreshProducts: () => Promise<void>;
+  onRetryTaxRate: () => void;
 }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [category, setCategory] = useState("Semua");
@@ -1498,7 +814,7 @@ function POS({
         product.sku.toLowerCase().includes(query.toLowerCase()))
   );
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const tax = Math.round(subtotal * 0.1);
+  const tax = Math.round(subtotal * (taxRate ?? 0));
   const total = subtotal + tax;
   const selectedCash = payment === "Tunai" ? cashReceived : total;
   const change = calculateChange(total, selectedCash);
@@ -1564,6 +880,11 @@ function POS({
   };
   const pay = async () => {
     if (isSaving) return;
+    if (taxRate === null)
+      return onToast({
+        tone: "warning",
+        message: "Tarif transaksi belum berhasil dimuat dari Supabase. Coba lagi.",
+      });
     if (!cart.length)
       return onToast({
         tone: "warning",
@@ -1608,7 +929,7 @@ function POS({
               };
         })
       );
-      onTransaction(sale.total);
+      await onTransaction(sale.total);
       setReceipt({
         transactionNumber: sale.transactionNumber,
         items: cart,
@@ -1622,20 +943,22 @@ function POS({
       });
       setCartOpen(false);
     } catch (error) {
+      const message =
+        error instanceof Error && error.message.includes("Insufficient stock")
+          ? "Stok tidak cukup untuk menyelesaikan transaksi. Perbarui stok produk dan coba lagi."
+          : error instanceof Error
+            ? `Transaksi gagal disimpan: ${error.message}`
+            : "Transaksi gagal disimpan. Periksa koneksi Supabase.";
       return onToast({
         tone: "warning",
-        message:
-          error instanceof Error
-            ? `Transaksi gagal disimpan: ${error.message}`
-            : "Transaksi gagal disimpan. Periksa koneksi Supabase.",
+        message,
       });
     } finally {
       setIsSaving(false);
     }
   };
-  const finishTransaction = async () => {
+  const finishTransaction = () => {
     setReceipt(null);
-    await onTransaction(total);
     setCart([]);
     setNote("");
     setCashReceived(0);
@@ -1757,9 +1080,10 @@ function POS({
           <span>Subtotal</span>
           <b className="text-gray-800">{money(subtotal)}</b>
         </div>
+        {taxRateError && <button className="row-link" onClick={onRetryTaxRate}>Tarif pajak gagal dimuat. Coba lagi.</button>}
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-gray-500">
           <span>
-            Pajak layanan <small>10%</small>
+            Pajak layanan <small>{taxRate === null ? "—" : `${number(taxRate * 100)}%`}</small>
           </span>
           <b className="text-gray-800">{money(tax)}</b>
         </div>
@@ -1836,7 +1160,7 @@ function POS({
       <button
         className="button button-primary mt-3 w-full justify-center transition-all duration-300 active:scale-[.98]"
         onClick={pay}
-        disabled={isSaving}
+        disabled={isSaving || taxRate === null}
       >
         {isSaving ? "Menyimpan..." : `Bayar ${money(total)}`}{" "}
         <ChevronRight size={16} />
@@ -1846,12 +1170,12 @@ function POS({
   return (
     <>
       <PageTitle
-        eyebrow="TRANSACTION / COUNTER 01"
+        eyebrow={`TRANSACTION / ${outletName}`}
         title="POS / Kasir"
         description="Proses pesanan dengan cepat, stok otomatis tersinkronisasi."
         actions={
           <div className="counter-status">
-            <span className="live-dot" /> Counter 01 · Siap melayani
+            <span className="live-dot" /> Supabase checkout
           </div>
         }
       />
@@ -1880,7 +1204,7 @@ function POS({
             </button>
           </div>
           <div className="mb-4 flex flex-wrap gap-2">
-            {categories.map(item => (
+            {["Semua", ...categoryNames].map(item => (
               <button
                 key={item}
                 onClick={() => setCategory(item)}
@@ -1890,6 +1214,8 @@ function POS({
               </button>
             ))}
           </div>
+          {productError && <div className="empty-state" role="alert"><b>Produk gagal dimuat</b><span>{productError}</span><button className="button button-secondary" onClick={() => void onRefreshProducts()}>Coba lagi</button></div>}
+          {productLoading && !products.length && <div className="h-48 animate-pulse rounded-lg bg-gray-100" />}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:gap-4">
             {filtered.map(product => (
               <button
@@ -1931,11 +1257,11 @@ function POS({
               </button>
             ))}
           </div>
-          {!filtered.length && (
+          {!filtered.length && !productLoading && !productError && (
             <div className="empty-state">
               <Search size={24} />
-              <b>Produk tidak ditemukan</b>
-              <span>Coba ubah pencarian atau kategori.</span>
+              <b>{products.length ? "Produk tidak ditemukan" : "Belum ada produk"}</b>
+              <span>{products.length ? "Coba ubah pencarian atau kategori." : "Tambahkan produk di Inventory untuk mulai bertransaksi."}</span>
             </div>
           )}
         </section>
@@ -2088,12 +1414,22 @@ function Inventory({
   onToast,
   outletId,
   canWriteSupabase,
+  categoryOptions,
+  supplierOptions,
+  loading,
+  loadError,
+  onRefresh,
 }: {
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   onToast: (toast: Toast) => void;
   outletId: number;
   canWriteSupabase: boolean;
+  categoryOptions: Array<{ id: number; name: string }>;
+  supplierOptions: Array<{ name: string }>;
+  loading: boolean;
+  loadError: string | null;
+  onRefresh: () => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("Semua status");
@@ -2109,7 +1445,7 @@ function Inventory({
       product.name.toLowerCase().includes(query.toLowerCase()) &&
       (filter === "Semua status" ||
         (filter === "Kritis"
-          ? getRisk(product) === "Tinggi"
+          ? getRisk(product) === "Tinggi" || getRisk(product) === "Habis"
           : getRisk(product) === filter))
   );
   const adjustStock = async (product: Product, amount: number) => {
@@ -2141,10 +1477,28 @@ function Inventory({
           : item
       )
     );
+    await onRefresh();
     onToast({
       tone: "success",
       message: `Stok ${product.name} berhasil disesuaikan.`,
     });
+  };
+  const deleteProduct = async (product: Product) => {
+    if (!canWriteSupabase)
+      return onToast({ tone: "warning", message: "Hanya Admin yang dapat menghapus produk." });
+    if (!window.confirm(`Hapus produk ${product.name}?`)) return;
+    try {
+      await deleteSupabaseProduct(product.id, outletId);
+      setProducts(current => current.filter(item => item.id !== product.id));
+      setSelected(null);
+      await onRefresh();
+      onToast({ tone: "success", message: `${product.name} berhasil dihapus.` });
+    } catch (error) {
+      onToast({
+        tone: "warning",
+        message: error instanceof Error ? `Produk gagal dihapus: ${error.message}` : "Produk gagal dihapus dari Supabase.",
+      });
+    }
   };
   return (
     <>
@@ -2161,6 +1515,7 @@ function Inventory({
           </button>
         }
       />
+      {loadError && <div className="empty-state" role="alert"><b>Inventory gagal dimuat</b><span>{loadError}</span><button className="button button-secondary" onClick={onRefresh}>Coba lagi</button></div>}
       <div className="inventory-kpis">
         <div className="mini-kpi">
           <span className="kpi-icon">
@@ -2237,7 +1592,9 @@ function Inventory({
             Export CSV
           </button>
         </div>
-        <div className="table-wrap overflow-x-auto">
+        {loading && !products.length ? (
+          <div className="h-48 animate-pulse rounded-lg bg-gray-100" />
+        ) : <div className="table-wrap overflow-x-auto">
           <table className="data-table">
             <thead>
               <tr>
@@ -2304,24 +1661,18 @@ function Inventory({
               ))}
             </tbody>
           </table>
-        </div>
+        </div>}
         {!rows.length && (
           <div className="empty-state">
             <Search size={24} />
-            <b>Produk tidak ditemukan</b>
-            <span>Coba ubah kata kunci atau filter.</span>
+            <b>{products.length ? "Produk tidak ditemukan" : "Belum ada produk"}</b>
+            <span>{products.length ? "Coba ubah kata kunci atau filter." : "Tambahkan produk untuk mulai mengelola inventory."}</span>
           </div>
         )}
         <div className="table-footer">
           <span>
             Menampilkan {rows.length} dari {products.length} produk
           </span>
-          <div className="pagination">
-            <button disabled>‹</button>
-            <button className="active">1</button>
-            <button>2</button>
-            <button>›</button>
-          </div>
         </div>
       </section>
       {selected && (
@@ -2339,12 +1690,15 @@ function Inventory({
               stock: Math.max(0, selected.stock + amount),
             });
           }}
+          onDelete={() => void deleteProduct(selected)}
         />
       )}{" "}
       {(showAdd || editing) && (
         <AddProductModal
           initialProduct={editing || undefined}
           availableProducts={products}
+          categoryOptions={categoryOptions}
+          supplierOptions={supplierOptions}
           onClose={() => {
             setShowAdd(false);
             setEditing(null);
@@ -2359,8 +1713,8 @@ function Inventory({
               const saved = await insertSupabaseProduct({
                 ...product,
                 outlet_id: outletId,
+                category_id: product.categoryId,
                 min_stock: product.minStock,
-                daily_sales: product.dailySales,
                 icon_name: product.iconName,
                 is_bundle: Boolean(product.isBundle),
                 bundle_items: product.bundleItems || [],
@@ -2368,11 +1722,10 @@ function Inventory({
               const savedProduct = mapSupabaseProduct(saved);
               setProducts(current =>
                 product.id
-                  ? current.map(item =>
-                      item.id === product.id ? savedProduct : item
-                    )
+                  ? current.map(item => item.id === product.id ? savedProduct : item)
                   : [...current, savedProduct]
               );
+              await onRefresh();
             } catch (error) {
               return onToast({
                 tone: "warning",
@@ -2402,11 +1755,13 @@ function ProductModal({
   onClose,
   onEdit,
   onAdjust,
+  onDelete,
 }: {
   product: Product;
   onClose: () => void;
   onEdit: () => void;
   onAdjust: (amount: number) => void;
+  onDelete: () => void;
 }) {
   const coverage = getCoverage(product);
   return (
@@ -2459,29 +1814,20 @@ function ProductModal({
           </div>
           <div>
             <span>Stock coverage</span>
-            <b>{coverage > 30 ? ">30" : number(coverage)} hari</b>
+            <b>{Number.isFinite(coverage) ? `${number(coverage)} hari` : "Belum cukup data"}</b>
           </div>
           <div>
             <span>Predicted stockout</span>
-            <b>{coverage > 30 ? "Aman" : `±${Math.ceil(coverage)} hari`}</b>
+            <b>{Number.isFinite(coverage) ? `±${Math.ceil(coverage)} hari` : "Belum dapat diprediksi"}</b>
           </div>
         </div>
-        <div className="fake-history">
-          <div className="history-head">
-            <b>Sales history</b>
-            <span>30 hari</span>
-          </div>
-          <div className="history-bars">
-            {[35, 42, 30, 53, 45, 60, 48, 70, 58, 76, 69, 83, 74, 88].map(
-              (height, index) => (
-                <i key={index} style={{ height: `${height}%` }} />
-              )
-            )}
-          </div>
-        </div>
+        <p>{product.historyDays} hari transaksi tersedia untuk perhitungan forecast.</p>
         <div className="modal-footer flex-wrap">
           <button className="button button-secondary" onClick={onEdit}>
             <Settings size={15} /> Edit produk
+          </button>
+          <button className="button button-secondary" onClick={onDelete}>
+            <Trash2 size={15} /> Hapus produk
           </button>
           <button
             className="button button-secondary"
@@ -2503,19 +1849,33 @@ function AddProductModal({
   onAdd,
   initialProduct,
   availableProducts,
+  categoryOptions,
+  supplierOptions,
 }: {
   onClose: () => void;
   onAdd: (product: Omit<Product, "id"> & { id?: number }) => void;
   initialProduct?: Product;
   availableProducts: Product[];
+  categoryOptions: Array<{ id: number; name: string }>;
+  supplierOptions: Array<{ name: string }>;
 }) {
   const [name, setName] = useState(initialProduct?.name || "");
+  const [sku, setSku] = useState(initialProduct?.sku || "");
   const [price, setPrice] = useState(
     initialProduct ? String(initialProduct.price) : ""
   );
+  const [cost, setCost] = useState(initialProduct ? String(initialProduct.cost) : "");
   const [stock, setStock] = useState(
     initialProduct ? String(initialProduct.stock) : ""
   );
+  const [minStock, setMinStock] = useState(
+    initialProduct ? String(initialProduct.minStock) : ""
+  );
+  const [unit, setUnit] = useState(initialProduct?.unit || "");
+  const [categoryId, setCategoryId] = useState(
+    initialProduct?.categoryId ? String(initialProduct.categoryId) : ""
+  );
+  const [supplier, setSupplier] = useState(initialProduct?.supplier || "");
   const [iconName, setIconName] = useState(
     initialProduct?.iconName || "Package"
   );
@@ -2524,22 +1884,38 @@ function AddProductModal({
     initialProduct?.bundleItems || []
   );
   const submit = () => {
-    if (!name || !price || (!isBundle && !stock)) return;
+    if (
+      !name.trim() ||
+      !sku.trim() ||
+      !categoryId ||
+      !unit.trim() ||
+      !price ||
+      !cost ||
+      !minStock ||
+      (!isBundle && !stock)
+    )
+      return;
     if (isBundle && !bundleItems.length) return;
+    const category = categoryOptions.find(
+      item => item.id === Number(categoryId)
+    );
+    if (!category) return;
     onAdd({
       ...(initialProduct ? { id: initialProduct.id } : {}),
-      name,
-      sku:
-        initialProduct?.sku || `NEW-${Math.floor(100 + Math.random() * 899)}`,
-      category: initialProduct?.category || "Kopi",
-      unit: initialProduct?.unit || "pcs",
+      name: name.trim(),
+      sku: sku.trim(),
+      category: category.name,
+      categoryId: category.id,
+      unit: unit.trim(),
       stock: isBundle ? 0 : Number(stock),
-      minStock: initialProduct?.minStock || 5,
-      cost: initialProduct?.cost || Math.round(Number(price) * 0.5),
+      minStock: Number(minStock),
+      cost: Number(cost),
       price: Number(price),
-      supplier: initialProduct?.supplier || "Supplier baru",
-      dailySales: initialProduct?.dailySales || 1,
-      trend: initialProduct?.trend || 0,
+      supplier,
+      supplierLeadTimeDays: initialProduct?.supplierLeadTimeDays ?? null,
+      dailySales: initialProduct?.dailySales || 0,
+      historyDays: initialProduct?.historyDays || 0,
+      trend: initialProduct?.trend ?? null,
       emoji: initialProduct?.emoji || "📦",
       iconName,
       isBundle,
@@ -2568,13 +1944,38 @@ function AddProductModal({
           />
         </label>
         <label>
+          SKU
+          <input value={sku} onChange={event => setSku(event.target.value)} />
+        </label>
+        <label>
+          Kategori
+          <select className="select-control" value={categoryId} onChange={event => setCategoryId(event.target.value)}>
+            <option value="">Pilih kategori</option>
+            {categoryOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </label>
+        <label>
+          Satuan
+          <input value={unit} onChange={event => setUnit(event.target.value)} />
+        </label>
+        <label>
+          Supplier
+          <select className="select-control" value={supplier} onChange={event => setSupplier(event.target.value)}>
+            <option value="">Tidak ditentukan</option>
+            {supplierOptions.map(item => <option value={item.name} key={item.name}>{item.name}</option>)}
+          </select>
+        </label>
+        <label>
           Harga jual
           <input
             type="number"
             value={price}
             onChange={event => setPrice(event.target.value)}
-            placeholder="28000"
           />
+        </label>
+        <label>
+          Harga pokok
+          <input type="number" value={cost} onChange={event => setCost(event.target.value)} />
         </label>
         <label className={isBundle ? "opacity-50" : ""}>
           Stok awal{" "}
@@ -2585,9 +1986,12 @@ function AddProductModal({
             type="number"
             value={isBundle ? "" : stock}
             onChange={event => setStock(event.target.value)}
-            placeholder={isBundle ? "Dihitung otomatis" : "20"}
             disabled={isBundle}
           />
+        </label>
+        <label>
+          Minimum stok
+          <input type="number" value={minStock} onChange={event => setMinStock(event.target.value)} />
         </label>
         <label className="mt-4 flex min-h-10 cursor-pointer flex-row items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--mint-soft)] px-3 py-2 text-xs font-bold text-[var(--ink)]">
           <input
@@ -2730,298 +2134,28 @@ function AddProductModal({
   );
 }
 
-function Forecast({
-  products,
-  onCreateDraft,
-  onToast,
-}: {
-  products: Product[];
-  onCreateDraft: (product: Product) => void;
-  onToast: (toast: Toast) => void;
-}) {
-  const riskyProducts = products
-    .filter(product => getRisk(product) !== "Sehat")
-    .sort((a, b) => getCoverage(a) - getCoverage(b));
-  const [selected, setSelected] = useState<Product>(
-    products.find(product => product.name === "Arabica Coffee") ||
-      riskyProducts[0] ||
-      products[0]
-  );
-  const [analysis, setAnalysis] = useState<string | null>(null);
-  return (
-    <>
-      <PageTitle
-        eyebrow="INTELLIGENCE / DECISION SUPPORT"
-        title="AI Forecast"
-        description="Prediksi kebutuhan stok berdasarkan 30 hari transaksi historis — transparan dan mudah dijelaskan."
-        actions={
-          <button
-            className="button button-secondary"
-            onClick={() =>
-              onToast({
-                tone: "info",
-                message: "Forecast diperbarui berdasarkan 30+ hari transaksi.",
-              })
-            }
-          >
-            <Sparkles size={16} /> Refresh forecast
-          </button>
-        }
-      />
-      <div className="forecast-hero">
-        <div>
-          <div className="ai-kicker">
-            <span className="ai-spark">
-              <Sparkles size={13} />
-            </span>{" "}
-            AI-POWERED BUSINESS ASSISTANT
-          </div>
-          <h2>
-            Jangan tunggu stok habis.
-            <br />
-            <em>Ambil keputusan lebih awal.</em>
-          </h2>
-          <p>
-            Model membaca average daily sales, tren 7 hari, stok saat ini, dan
-            lead time supplier.
-          </p>
-          <div className="forecast-method">
-            <span>
-              <Check size={14} /> 30-day historical sales
-            </span>
-            <span>
-              <Check size={14} /> Explainable calculation
-            </span>
-            <span>
-              <Check size={14} /> Supplier lead time
-            </span>
-          </div>
-        </div>
-        <div className="forecast-orbit">
-          <div className="orbit-ring ring-one" />
-          <div className="orbit-ring ring-two" />
-          <div className="orbit-center">
-            <Sparkles size={27} />
-            <b>AI</b>
-            <small>ready</small>
-          </div>
-          <span className="orbit-dot dot-one" />
-          <span className="orbit-dot dot-two" />
-          <span className="orbit-dot dot-three" />
-        </div>
-      </div>
-      <div className="forecast-layout">
-        <section className="panel forecast-table-panel">
-          <div className="panel-header min-w-0 flex-wrap">
-            <div>
-              <h2>Prioritas restock</h2>
-              <p>{riskyProducts.length} produk membutuhkan perhatian</p>
-            </div>
-            <span className="forecast-confidence">
-              <Zap size={13} /> Confidence 87%
-            </span>
-          </div>
-          <div className="table-wrap overflow-x-auto">
-            <table className="data-table forecast-table">
-              <thead>
-                <tr>
-                  <th>Produk</th>
-                  <th>Stok</th>
-                  <th>Avg. daily sales</th>
-                  <th>Predicted stockout date</th>
-                  <th>Risk level</th>
-                  <th>Rekomendasi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {riskyProducts.map(product => (
-                  <tr
-                    key={product.id}
-                    onClick={() => setSelected(product)}
-                    className={
-                      selected?.id === product.id ? "selected-row" : ""
-                    }
-                  >
-                    <td>
-                      <div className="table-product">
-                        <span className="table-emoji">
-                          <ProductIcon product={product} size={22} />
-                        </span>
-                        <span>
-                          <b className="truncate text-[10px] sm:text-[11px]">
-                            {product.name}
-                          </b>
-                          <small>
-                            {product.sku} · trend {product.trend}%
-                          </small>
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <b>
-                        {number(product.stock)} {product.unit}
-                      </b>
-                    </td>
-                    <td>
-                      {number(product.dailySales)} {product.unit}/hari
-                    </td>
-                    <td>
-                      <b
-                        className={
-                          getCoverage(product) < 4
-                            ? "danger-text"
-                            : "warning-text"
-                        }
-                      >
-                        {getStockoutDate(product)}
-                      </b>
-                    </td>
-                    <td>
-                      <StatusBadge risk={getRisk(product)} />
-                    </td>
-                    <td>
-                      <button
-                        className="recommendation-link"
-                        onClick={event => {
-                          event.stopPropagation();
-                          setSelected(product);
-                        }}
-                      >
-                        Lihat rekomendasi <ChevronRight size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-        <section className="forecast-detail-card">
-          <div className="detail-card-top">
-            <div className="product-hero-mini">
-              <span>{selected.emoji}</span>
-              <div>
-                <b>{selected.name}</b>
-                <small>
-                  {selected.sku} · {selected.supplier}
-                </small>
-              </div>
-            </div>
-            <StatusBadge risk={getRisk(selected)} />
-          </div>
-          <div className="prediction-label">
-            <span>Predicted stockout date</span>
-            <strong>{getStockoutDate(selected)}</strong>
-          </div>
-          <p className="prediction-copy">
-            Penjualan rata-rata{" "}
-            <b>
-              {number(selected.dailySales)} {selected.unit}/hari
-            </b>
-            , stok saat ini{" "}
-            <b>
-              {number(selected.stock)} {selected.unit}
-            </b>
-            , sehingga diprediksi habis dalam{" "}
-            <b>
-              {getCoverage(selected) > 30
-                ? "lebih dari 30 hari"
-                : `${Math.ceil(getCoverage(selected))} hari`}
-              .
-            </b>{" "}
-            Risk: <b>{getRisk(selected).toUpperCase()}</b>.
-          </p>
-          <div className="why-prediction">
-            <div className="why-head">
-              <b>Why this prediction?</b>
-              <HelpCircle size={15} />
-            </div>
-            <div className="why-item">
-              <span className="why-dot mint" />
-              <span>
-                Sales {selected.trend >= 0 ? "meningkat" : "menurun"}{" "}
-                <b>{Math.abs(selected.trend)}%</b> dalam 7 hari terakhir
-              </span>
-            </div>
-            <div className="why-item">
-              <span className="why-dot blue" />
-              <span>
-                30-day average{" "}
-                <b>
-                  {number(selected.dailySales)} {selected.unit}/hari
-                </b>
-              </span>
-            </div>
-            <div className="why-item">
-              <span className="why-dot amber" />
-              <span>
-                Stok{" "}
-                <b>
-                  {number(selected.stock)} {selected.unit}
-                </b>{" "}
-                dibagi rata-rata penjualan
-              </span>
-            </div>
-          </div>
-          <div className="recommendation-box">
-            <div className="recommendation-icon">
-              <Zap size={17} />
-            </div>
-            <div>
-              <span>AI Recommendation</span>
-              <b>
-                Restock {Math.max(10, Math.ceil(selected.dailySales * 7))}{" "}
-                {selected.unit} {selected.name}
-              </b>
-              <p>Menjaga stock coverage selama ±7 hari ke depan.</p>
-            </div>
-          </div>
-          {analysis && (
-            <div className="ai-provider-response">
-              <Sparkles size={14} />
-              <span>
-                <b>Analisis forecast:</b> {analysis}
-              </span>
-            </div>
-          )}
-          <div className="forecast-detail-actions">
-            <button
-              className="button button-secondary"
-              onClick={() =>
-                setAnalysis(
-                  `${selected.name} diperkirakan bertahan ${Math.max(0, Math.ceil(getCoverage(selected)))} hari dengan tren penjualan ${selected.trend >= 0 ? "naik" : "turun"} ${Math.abs(selected.trend)}%.`
-                )
-              }
-            >
-              <Sparkles size={15} /> Tampilkan analisis
-            </button>
-            <button
-              className="button button-primary"
-              onClick={() => onCreateDraft(selected)}
-            >
-              Create Purchase Draft <ChevronRight size={16} />
-            </button>
-          </div>
-          <small className="forecast-disclaimer">
-            <Sparkles size={12} /> Forecast berasal dari data historis, bukan
-            angka acak.
-          </small>
-        </section>
-      </div>
-    </>
-  );
-}
-
 function Orders({
   orders,
   onConfirm,
+  onReceive,
+  onEdit,
+  onDelete,
   onToast,
   onCreateDraft,
+  loading,
+  error,
+  onRefresh,
 }: {
   orders: PurchaseOrder[];
   onConfirm: (id: string) => void;
+  onReceive: (order: PurchaseOrder) => void;
+  onEdit: (order: PurchaseOrder) => void;
+  onDelete: (order: PurchaseOrder) => void;
   onToast: (toast: Toast) => void;
   onCreateDraft: () => void;
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
 }) {
   const [filter, setFilter] = useState("Semua");
   const visible =
@@ -3040,13 +2174,14 @@ function Orders({
           </button>
         }
       />
+      {error && <div className="empty-state" role="alert"><b>Purchase order gagal dimuat</b><span>{error}</span><button className="button button-secondary" onClick={onRefresh}>Coba lagi</button></div>}
       <div className="order-status-grid">
         <div className="mini-kpi">
           <span className="kpi-icon violet-bg">
             <FileText size={16} />
           </span>
           <div>
-            <span>Total order bulan ini</span>
+            <span>Total order</span>
             <b>{orders.length} order</b>
           </div>
         </div>
@@ -3089,7 +2224,7 @@ function Orders({
             ))}
           </div>
         </div>
-        <div className="table-wrap overflow-x-auto">
+        {loading && !orders.length ? <div className="h-48 animate-pulse rounded-lg bg-gray-100" /> : <div className="table-wrap overflow-x-auto">
           <table className="data-table">
             <thead>
               <tr>
@@ -3129,37 +2264,28 @@ function Orders({
                     </span>
                   </td>
                   <td>
-                    {order.status === "Draft" ? (
-                      <button
-                        className="small-action"
-                        onClick={() => onConfirm(order.id)}
-                      >
-                        Konfirmasi
-                      </button>
-                    ) : (
-                      <button
-                        className="row-link"
-                        onClick={() =>
-                          onToast({
-                            tone: "info",
-                            message: `Detail ${order.id}: ${order.status}, total ${money(order.total)}.`,
-                          })
-                        }
-                      >
-                        Detail <ChevronRight size={14} />
-                      </button>
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {order.status === "Draft" && (
+                        <>
+                          <button className="small-action" onClick={() => onEdit(order)}>Edit</button>
+                          <button className="small-action" onClick={() => onConfirm(order.id)}>Pesan</button>
+                          <button className="row-link" onClick={() => onDelete(order)}>Hapus</button>
+                        </>
+                      )}
+                      {order.status === "Ordered" && <button className="small-action" onClick={() => onReceive(order)}>Tandai diterima</button>}
+                      {order.status === "Received" && <span>Stok diperbarui</span>}
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </div>}
         {!visible.length && (
           <div className="empty-state">
             <ClipboardList size={24} />
-            <b>Belum ada order di filter ini</b>
-            <span>Buat draft dari AI Forecast atau tombol di atas.</span>
+            <b>{orders.length ? "Belum ada order di filter ini" : "Belum ada purchase order"}</b>
+            <span>{orders.length ? "Ubah filter untuk melihat pesanan lain." : "Buat draft dari forecast atau tombol di atas."}</span>
           </div>
         )}
       </section>
@@ -3167,559 +2293,20 @@ function Orders({
   );
 }
 
-function Suppliers({ onToast }: { onToast: (toast: Toast) => void }) {
-  const [suppliers, setSuppliers] = useState<
-    Array<{
-      name: string;
-      contact: string;
-      products: string;
-      lead: string;
-      status: string;
-      initials: string;
-      phone: string;
-    }>
-  >([]);
-  useEffect(() => {
-    let active = true;
-    listSupabaseSuppliers()
-      .then(rows => {
-        if (active)
-          setSuppliers(
-            rows.map(item => ({
-              name: item.name,
-              contact: item.contact,
-              products: "-",
-              lead: `${item.lead_time_days} hari`,
-              status: item.status,
-              initials: item.name.slice(0, 2).toUpperCase(),
-              phone: item.phone,
-            }))
-          );
-      })
-      .catch(error =>
-        onToast({
-          tone: "warning",
-          message:
-            error instanceof Error
-              ? `Supplier gagal dimuat: ${error.message}`
-              : "Supplier gagal dimuat dari Supabase.",
-        })
-      );
-    return () => {
-      active = false;
-    };
-  }, []);
-  const addSupplier = async () => {
-    const name = window.prompt("Nama supplier baru");
-    if (!name) return;
-    const contact =
-      window.prompt("Nama kontak supplier", "PIC Supplier") || "PIC Supplier";
-    const phone = window.prompt("Nomor telepon", "+62") || "+62";
-    try {
-      const created = await insertSupabaseSupplier({
-        name,
-        contact,
-        phone,
-        lead_time_days: 3,
-        status: "Aktif",
-      });
-      setSuppliers(current => [
-        ...current,
-        {
-          name: created.name,
-          contact: created.contact,
-          products: "-",
-          lead: `${created.lead_time_days} hari`,
-          status: created.status,
-          initials: created.name.slice(0, 2).toUpperCase(),
-          phone: created.phone,
-        },
-      ]);
-      onToast({ tone: "success", message: `${name} berhasil ditambahkan.` });
-    } catch (error) {
-      onToast({
-        tone: "warning",
-        message:
-          error instanceof Error
-            ? `Supplier belum tersimpan: ${error.message}`
-            : "Supplier belum tersimpan ke Supabase.",
-      });
-    }
-  };
-  return (
-    <>
-      <PageTitle
-        eyebrow="PARTNERS / SUPPLY NETWORK"
-        title="Supplier"
-        description="Hubungan supplier yang sehat membuat forecasting lebih presisi."
-        actions={
-          <button className="button button-primary" onClick={addSupplier}>
-            <Plus size={16} /> Tambah supplier
-          </button>
-        }
-      />
-      <div className="supplier-grid">
-        {suppliers.map(supplier => (
-          <div className="supplier-card panel" key={supplier.name}>
-            <div className="supplier-top">
-              <div className="supplier-avatar">{supplier.initials}</div>
-              <div>
-                <h3>{supplier.name}</h3>
-                <span>{supplier.contact}</span>
-              </div>
-              <button
-                className="icon-button small"
-                onClick={() =>
-                  onToast({
-                    tone: "info",
-                    message: `Detail ${supplier.name}: lead time ${supplier.lead}.`,
-                  })
-                }
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-            <div className="supplier-meta">
-              <div>
-                <span>Produk</span>
-                <b>{supplier.products}</b>
-              </div>
-              <div>
-                <span>Lead time</span>
-                <b>{supplier.lead}</b>
-              </div>
-            </div>
-            <div className="supplier-bottom">
-              <span
-                className={`badge ${supplier.status === "Aktif" ? "badge-green" : "badge-amber"}`}
-              >
-                <span className="badge-dot" /> {supplier.status}
-              </span>
-              <button
-                className="row-link"
-                onClick={() => {
-                  if ("phone" in supplier && supplier.phone)
-                    window.location.href = `tel:${supplier.phone}`;
-                  else
-                    onToast({
-                      tone: "info",
-                      message: `Kontak ${supplier.contact}: tersedia di data supplier.`,
-                    });
-                }}
-              >
-                Hubungi <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="supplier-note">
-        <Truck size={18} />
-        <div>
-          <b>Supplier lead time terhubung ke AI Forecast</b>
-          <span>
-            Rekomendasi reorder mempertimbangkan waktu pengiriman agar stok tiba
-            sebelum habis.
-          </span>
-        </div>
-        <button
-          onClick={() =>
-            onToast({
-              tone: "info",
-              message: "Lead time dipakai dalam perhitungan prediksi stockout.",
-            })
-          }
-        >
-          Pelajari <ChevronRight size={15} />
-        </button>
-      </div>
-    </>
-  );
-}
-
-function ReportsChart() {
-  const trend = [
-    { day: "21 Agu", revenue: 2.1, profit: 1.1 },
-    { day: "25 Agu", revenue: 2.8, profit: 1.5 },
-    { day: "29 Agu", revenue: 2.4, profit: 1.3 },
-    { day: "02 Sep", revenue: 3.2, profit: 1.8 },
-    { day: "06 Sep", revenue: 3.0, profit: 1.7 },
-    { day: "10 Sep", revenue: 3.7, profit: 2.1 },
-    { day: "14 Sep", revenue: 4.1, profit: 2.4 },
-    { day: "19 Sep", revenue: 4.8, profit: 2.9 },
-  ];
-  const top = [
-    { name: "Espresso", value: 4350000 },
-    { name: "Vanilla", value: 1150000 },
-    { name: "Caramel", value: 1050000 },
-    { name: "Cold Brew", value: 928000 },
-  ];
-  return (
-    <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[1.5fr_1fr]">
-      <div style={{ height: 250 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={trend}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e9eeeb" />
-            <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} unit=" jt" />
-            <Tooltip formatter={(value: number) => [`Rp ${value} jt`, ""]} />
-            <Legend />
-            <Line
-              type="monotone"
-              dataKey="revenue"
-              name="Revenue"
-              stroke="#4f8a77"
-              strokeWidth={3}
-              dot={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="profit"
-              name="Profit"
-              stroke="#7b6aa5"
-              strokeWidth={3}
-              dot={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-      <div style={{ height: 250 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={top} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" stroke="#e9eeeb" />
-            <XAxis type="number" tick={{ fontSize: 10 }} />
-            <YAxis
-              type="category"
-              dataKey="name"
-              tick={{ fontSize: 10 }}
-              width={65}
-            />
-            <Tooltip formatter={(value: number) => [money(value), "Revenue"]} />
-            <Bar
-              dataKey="value"
-              name="Produk terlaris"
-              fill="#4f8a77"
-              radius={[0, 6, 6, 0]}
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
-
-function Reports({ onToast }: { onToast: (toast: Toast) => void }) {
-  const exportReport = () => {
-    downloadCsv("kopipintar-report.csv", [
-      ["Metric", "Value"],
-      ["Revenue", "25500000"],
-      ["COGS", "12000000"],
-      ["Gross Profit", "13500000"],
-      ["Operating Expenses", "4000000"],
-      ["Net Profit", "9500000"],
-    ]);
-    onToast({ tone: "success", message: "Laporan CSV berhasil diunduh." });
-  };
-  return (
-    <>
-      <PageTitle
-        eyebrow="ANALYTICS / BUSINESS HEALTH"
-        title="Reports"
-        description="Ubah data operasional menjadi keputusan bisnis yang lebih baik."
-        actions={
-          <>
-            <select className="select-control">
-              <option>30 hari terakhir</option>
-              <option>7 hari terakhir</option>
-              <option>Tahun ini</option>
-            </select>
-            <button
-              className="button button-secondary"
-              onClick={() => window.print()}
-            >
-              Export PDF
-            </button>
-            <button className="button button-primary" onClick={exportReport}>
-              Export CSV
-            </button>
-          </>
-        }
-      />
-      <div className="report-tabs">
-        <button
-          className="active"
-          onClick={() =>
-            onToast({
-              tone: "info",
-              message: "Overview menampilkan ringkasan bisnis.",
-            })
-          }
-        >
-          Overview
-        </button>
-        <button
-          onClick={() =>
-            onToast({
-              tone: "info",
-              message:
-                "Sales report: gunakan Export CSV untuk mengunduh data penjualan.",
-            })
-          }
-        >
-          Sales report
-        </button>
-        <button
-          onClick={() =>
-            onToast({
-              tone: "info",
-              message:
-                "Profit & Loss menampilkan revenue, COGS, dan net profit.",
-            })
-          }
-        >
-          Profit & Loss
-        </button>
-        <button
-          onClick={() =>
-            onToast({
-              tone: "info",
-              message: "Inventory report menampilkan nilai dan status stok.",
-            })
-          }
-        >
-          Inventory report
-        </button>
-      </div>
-      <div className="report-grid">
-        <section className="panel report-main">
-          <div className="panel-header min-w-0 flex-wrap">
-            <div>
-              <h2>Revenue & profit</h2>
-              <p>Performa finansial 30 hari terakhir</p>
-            </div>
-            <div className="legend">
-              <span>
-                <i className="legend-dot revenue" /> Revenue
-              </span>
-              <span>
-                <i className="legend-dot profit" /> Profit
-              </span>
-            </div>
-          </div>
-          <ReportsChart />
-        </section>
-        <section className="panel pnl-card">
-          <div className="panel-header min-w-0 flex-wrap">
-            <div>
-              <h2>Profit & Loss</h2>
-              <p>September 2024</p>
-            </div>
-            <FileBarChart size={20} className="muted-icon" />
-          </div>
-          <div className="pnl-rows">
-            <div>
-              <span>Revenue</span>
-              <b>{money(25500000)}</b>
-            </div>
-            <div>
-              <span>Cost of Goods Sold</span>
-              <b className="negative-text">-{money(12000000)}</b>
-            </div>
-            <div className="pnl-divider" />
-            <div>
-              <span>Gross Profit</span>
-              <b>{money(13500000)}</b>
-            </div>
-            <div>
-              <span>Operating Expenses</span>
-              <b className="negative-text">-{money(4000000)}</b>
-            </div>
-            <div className="pnl-total">
-              <span>Net Profit</span>
-              <strong>{money(9500000)}</strong>
-            </div>
-          </div>
-        </section>
-      </div>
-      <div className="report-grid bottom-reports">
-        <section className="panel category-report">
-          <div className="panel-header min-w-0 flex-wrap">
-            <div>
-              <h2>Sales by category</h2>
-              <p>Kontribusi revenue</p>
-            </div>
-          </div>
-          <div className="donut-row">
-            <div className="donut-chart">
-              <div>
-                <strong>Rp 25,5 jt</strong>
-                <span>Total revenue</span>
-              </div>
-            </div>
-            <div className="donut-legend">
-              <div>
-                <i className="donut-coffee" />
-                <span>Kopi</span>
-                <b>52%</b>
-              </div>
-              <div>
-                <i className="donut-food" />
-                <span>Makanan</span>
-                <b>26%</b>
-              </div>
-              <div>
-                <i className="donut-drink" />
-                <span>Non-kopi</span>
-                <b>14%</b>
-              </div>
-              <div>
-                <i className="donut-other" />
-                <span>Lainnya</span>
-                <b>8%</b>
-              </div>
-            </div>
-          </div>
-        </section>
-        <section className="panel performance-report">
-          <div className="panel-header min-w-0 flex-wrap">
-            <div>
-              <h2>Product performance</h2>
-              <p>Produk dengan pertumbuhan tercepat</p>
-            </div>
-          </div>
-          <div className="performance-list">
-            {[
-              {
-                name: "Matcha Latte",
-                value: "+32%",
-                width: "88%",
-                tone: "mint",
-              },
-              { name: "Cold Brew", value: "+21%", width: "72%", tone: "blue" },
-              {
-                name: "Arabica Coffee",
-                value: "+18%",
-                width: "64%",
-                tone: "amber",
-              },
-              {
-                name: "Cappuccino",
-                value: "+14%",
-                width: "52%",
-                tone: "violet",
-              },
-            ].map(item => (
-              <div className="performance-item" key={item.name}>
-                <div>
-                  <span>{item.name}</span>
-                  <b>{item.value}</b>
-                </div>
-                <div className="performance-track">
-                  <i className={item.tone} style={{ width: item.width }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-    </>
-  );
-}
-
-function ForecastQuickModal({
-  product,
-  onClose,
-  onCreateDraft,
-}: {
-  product: Product;
-  onClose: () => void;
-  onCreateDraft: (product: Product) => void;
-}) {
-  const days = Math.max(1, Math.ceil(getCoverage(product)));
-  const qty = Math.max(10, Math.ceil(product.dailySales * 7));
-  return (
-    <div className="modal-backdrop">
-      <div className="modal quick-forecast-modal">
-        <button className="modal-close" onClick={onClose}>
-          <X size={18} />
-        </button>
-        <div className="quick-forecast-top">
-          <div className="product-hero-mini">
-            <span>
-              <ProductIcon product={product} size={24} />
-            </span>
-            <div>
-              <b className="truncate text-[10px] sm:text-[11px]">
-                {product.name}
-              </b>
-              <small>
-                {product.sku} · {product.supplier}
-              </small>
-            </div>
-          </div>
-          <StatusBadge risk={getRisk(product)} />
-        </div>
-        <div className="eyebrow" style={{ marginTop: 22 }}>
-          AI RECOMMENDATION
-        </div>
-        <h2>Stok diprediksi habis dalam {days} hari.</h2>
-        <p>
-          Berdasarkan penjualan 7 hari terakhir, demand{" "}
-          {product.trend >= 0 ? "meningkat" : "menurun"}{" "}
-          <b>{Math.abs(product.trend)}%</b>. Inventory saat ini diperkirakan
-          hanya bertahan sampai <b>{days} hari</b> ke depan.
-        </p>
-        <div className="quick-metric-row">
-          <div>
-            <span>Stok saat ini</span>
-            <b>
-              {number(product.stock)} {product.unit}
-            </b>
-          </div>
-          <div>
-            <span>Penjualan harian</span>
-            <b>
-              {number(product.dailySales)} {product.unit}
-            </b>
-          </div>
-          <div>
-            <span>Rekomendasi order</span>
-            <b>
-              {qty} {product.unit}
-            </b>
-          </div>
-        </div>
-        <div className="quick-explanation">
-          <b>Why this prediction?</b>
-          <br />
-          Sales meningkat {Math.abs(product.trend)}% · Avg. daily sales{" "}
-          {number(product.dailySales)} {product.unit} · Supplier lead time 3
-          hari.
-        </div>
-        <div className="modal-footer flex-wrap">
-          <button className="button button-secondary" onClick={onClose}>
-            Nanti saja
-          </button>
-          <button
-            className="button button-primary"
-            onClick={() => onCreateDraft(product)}
-          >
-            Buat draft pesanan <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function SettingsPage({
   onToast,
   authUser,
+  displayName,
+  outlet,
+  taxRate,
   onGoogleLogin,
   onGoogleLogout,
 }: {
   onToast: (toast: Toast) => void;
   authUser: User | null;
+  displayName: string;
+  outlet: OutletOption | null;
+  taxRate: number | null;
   onGoogleLogin: () => void;
   onGoogleLogout: () => void;
 }) {
@@ -3728,12 +2315,8 @@ function SettingsPage({
       localStorage.getItem("kopipintar-receipt-footer") ||
       "Terima kasih sudah berkunjung!"
   );
-  const [taxEnabled, setTaxEnabled] = useState(
-    () => localStorage.getItem("kopipintar-tax-enabled") !== "false"
-  );
   const save = () => {
     localStorage.setItem("kopipintar-receipt-footer", receiptFooter);
-    localStorage.setItem("kopipintar-tax-enabled", String(taxEnabled));
     onToast({ tone: "success", message: "Pengaturan berhasil disimpan." });
   };
   return (
@@ -3753,7 +2336,7 @@ function SettingsPage({
           <div className="panel-header min-w-0 flex-wrap">
             <div>
               <h2>Outlet & transaksi</h2>
-              <p>Preferensi ini tersimpan di perangkat kasir.</p>
+              <p>Informasi outlet dan tarif pajak berasal dari data transaksi Supabase.</p>
             </div>
             <Settings size={20} className="muted-icon" />
           </div>
@@ -3766,8 +2349,8 @@ function SettingsPage({
               fontWeight: 700,
             }}
           >
-            Nama outlet
-            <input className="select-control" defaultValue="Kedai Bumi" />
+            Outlet
+            <input className="select-control" value={outlet ? `${outlet.name} · ${outlet.city}` : "Belum ada outlet"} readOnly />
           </label>
           <label
             style={{
@@ -3796,15 +2379,10 @@ function SettingsPage({
             }}
           >
             <span>
-              <b>Pajak layanan 10%</b>
+              <b>Pajak layanan {taxRate === null ? "Belum dimuat" : `${number(taxRate * 100)}%`}</b>
               <br />
-              <small>Tambahkan pajak layanan ke transaksi POS.</small>
+              <small>Tarif dihitung dari transaksi tersimpan di outlet ini.</small>
             </span>
-            <input
-              type="checkbox"
-              checked={taxEnabled}
-              onChange={event => setTaxEnabled(event.target.checked)}
-            />
           </label>
         </section>
         <section className="panel" style={{ padding: 22 }}>
@@ -3835,7 +2413,7 @@ function SettingsPage({
               </div>
               <div style={{ flex: 1 }}>
                 <b>
-                  {authUser.user_metadata?.full_name || "Operator"}
+                  {displayName}
                 </b>
                 <br />
                 <small>{authUser.email}</small>
@@ -4030,10 +2608,18 @@ function HelpCenter({
 function NotificationPanel({
   onClose,
   onNavigate,
+  products,
 }: {
   onClose: () => void;
   onNavigate: (page: PageKey) => void;
+  products: Product[];
 }) {
+  const alerts = products
+    .filter(product => product.stock <= product.minStock)
+    .sort((a, b) => a.stock - b.stock);
+  const trendProducts = products
+    .filter(product => product.trend !== null)
+    .sort((a, b) => Math.abs(b.trend || 0) - Math.abs(a.trend || 0));
   return (
     <div className="notification-panel">
       <div className="notification-header">
@@ -4042,264 +2628,255 @@ function NotificationPanel({
           <X size={16} />
         </button>
       </div>
-      <button
-        onClick={() => {
-          onNavigate("forecast");
-          onClose();
-        }}
-        className="notification-item critical"
-      >
-        <span>
-          <AlertCircle size={16} />
-        </span>
-        <div>
-          <b>Critical Stock</b>
-          <small>Arabica Coffee diprediksi habis dalam 3 hari.</small>
-          <time>2 menit lalu</time>
-        </div>
-      </button>
-      <button
-        onClick={() => {
-          onNavigate("forecast");
-          onClose();
-        }}
-        className="notification-item warning"
-      >
-        <span>
-          <AlertCircle size={16} />
-        </span>
-        <div>
-          <b>Low Stock</b>
-          <small>Brownies Fudge berada di bawah minimum stock.</small>
-          <time>1 jam lalu</time>
-        </div>
-      </button>
-      <button
-        onClick={() => {
-          onNavigate("dashboard");
-          onClose();
-        }}
-        className="notification-item success"
-      >
-        <span>
-          <ArrowUpRight size={16} />
-        </span>
-        <div>
-          <b>Positive Trend</b>
-          <small>Matcha Latte sales meningkat 32% minggu ini.</small>
-          <time>3 jam lalu</time>
-        </div>
-      </button>
+      {alerts.map(product => (
+        <button key={product.id} onClick={() => { onNavigate("forecast"); onClose(); }} className="notification-item warning">
+          <span><AlertCircle size={16} /></span>
+          <div><b>Stok perlu perhatian</b><small>{product.name}: {number(product.stock)} {product.unit} dari minimum {number(product.minStock)}.</small></div>
+        </button>
+      ))}
+      {trendProducts.slice(0, 1).map(product => (
+        <button key={product.id} onClick={() => { onNavigate("forecast"); onClose(); }} className="notification-item success">
+          <span><ArrowUpRight size={16} /></span>
+          <div><b>Perubahan demand</b><small>{product.name}: {number(product.trend || 0)}% dibanding 7 hari sebelumnya.</small></div>
+        </button>
+      ))}
+      {!alerts.length && !trendProducts.length && <div className="empty-state"><b>Belum ada insight</b><span>Insight muncul setelah data stok dan penjualan tersedia.</span></div>}
     </div>
   );
 }
 
 export default function Home() {
   const [activePage, setActivePage] = useState<PageKey>("dashboard");
-  const [products, setProducts] = useState<Product[]>(() => {
-    try {
-      return (
-        JSON.parse(localStorage.getItem("smart-pos-products") || "null") ||
-        initialProducts
-      );
-    } catch {
-      return initialProducts;
-    }
-  });
-  const [orders, setOrders] = useState<PurchaseOrder[]>(() => {
-    try {
-      return (
-        JSON.parse(localStorage.getItem("smart-pos-orders") || "null") ||
-        initialOrders
-      );
-    } catch {
-      return initialOrders;
-    }
-  });
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [outlets, setOutlets] = useState<OutletOption[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<SupabaseCategory[]>([]);
+  const [supplierRecords, setSupplierRecords] = useState<SupabaseSupplier[]>([]);
+  const [selectedOutletId, setSelectedOutletId] = useState(0);
   const [toast, setToast] = useState<Toast | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [forecastProduct, setForecastProduct] = useState<Product | null>(null);
+  const [forecastProductId, setForecastProductId] = useState<number | null>(null);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<KopipintarProfile | null>(null);
-  const [selectedOutletId, setSelectedOutletId] = useState(1);
   const [supabaseLoading, setSupabaseLoading] = useState(false);
-  const outlets: OutletOption[] = [
-    {
-      id: 1,
-      name: "Kedai Bumi",
-      code: "KB-01",
-      city: "Jakarta Selatan",
-      active: 1,
-    },
-    {
-      id: 2,
-      name: "Kedai Bumi — Senopati",
-      code: "KB-02",
-      city: "Jakarta Selatan",
-      active: 1,
-    },
-    {
-      id: 3,
-      name: "Kedai Bumi — Bandung",
-      code: "KB-03",
-      city: "Bandung",
-      active: 1,
-    },
-  ];
+  const [productsLoaded, setProductsLoaded] = useState(false);
+  const [productError, setProductError] = useState<string | null>(null);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [workspaceRetry, setWorkspaceRetry] = useState(0);
+  const [taxRate, setTaxRate] = useState<number | null>(null);
+  const [taxRateLoaded, setTaxRateLoaded] = useState(false);
+  const [taxRateError, setTaxRateError] = useState<string | null>(null);
+  const [taxRetry, setTaxRetry] = useState(0);
+
+  const showToast = useCallback((next: Toast) => {
+    setToast(next);
+    window.setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  const approvedRole = profile?.role === "admin" || profile?.role === "kasir";
+  const selectedOutlet = outlets.find(outlet => outlet.id === selectedOutletId) || null;
+  const productsWithSupplier = useMemo(
+    () => products.map(product => ({
+      ...product,
+      supplierLeadTimeDays:
+        supplierRecords.find(supplier => supplier.name === product.supplier)?.lead_time_days ?? null,
+    })),
+    [products, supplierRecords]
+  );
+  const productsForUi = useMemo(
+    () => productsWithSupplier.map(product => ({
+      ...product,
+      stock: sellableStock(product, productsWithSupplier),
+    })),
+    [productsWithSupplier]
+  );
+
   const refreshProducts = useCallback(async () => {
-    if (!isSupabaseAuthConfigured) {
-      showToast({
-        tone: "warning",
-        message: "Isi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.",
-      });
-      return;
-    }
+    if (!isSupabaseAuthConfigured || !supabase || !approvedRole || !selectedOutletId) return;
     setSupabaseLoading(true);
+    setProductError(null);
     try {
-      const rows = await listSupabaseProducts(
-        selectedOutletId,
-        profile?.role === "admin"
-      );
+      const rows = await listSupabaseProducts(selectedOutletId, true);
       setProducts(rows.map(mapSupabaseProduct));
+      setProductsLoaded(true);
     } catch (error) {
-      showToast({
-        tone: "warning",
-        message:
-          error instanceof Error
-            ? `Data inventory gagal dimuat: ${error.message}`
-            : "Data inventory gagal dimuat dari Supabase.",
-      });
+      const message = error instanceof Error ? error.message : "Data inventory gagal dimuat dari Supabase.";
+      setProducts([]);
+      setProductsLoaded(false);
+      setProductError(message);
+      showToast({ tone: "warning", message: `Data inventory gagal dimuat: ${message}` });
     } finally {
       setSupabaseLoading(false);
     }
-  }, [profile?.role, selectedOutletId]);
-  useEffect(() => {
-    localStorage.setItem("smart-pos-products", JSON.stringify(products));
-  }, [products]);
-  useEffect(() => {
-    localStorage.setItem("smart-pos-orders", JSON.stringify(orders));
-  }, [orders]);
-  useEffect(() => {
-    if (!supabase || !authUser) return;
-    let active = true;
-    listSupabasePurchaseOrders(selectedOutletId)
-      .then(rows => {
-        if (active)
-          setOrders(
-            rows.map(order => ({
-              id: order.order_number,
-              supplier: order.supplier,
-              product: order.product_name,
-              qty: Number(order.qty),
-              unit: order.unit,
-              unitCost: Number(order.unit_cost),
-              total: Number(order.total),
-              reason: order.reason,
-              status: order.status,
-              created: new Date(order.created_at).toLocaleDateString("id-ID"),
-            }))
-          );
-      })
-      .catch(error =>
-        showToast({
-          tone: "warning",
-          message:
-            error instanceof Error
-              ? `Purchase order gagal dimuat: ${error.message}`
-              : "Purchase order gagal dimuat dari Supabase.",
-        })
-      );
-    return () => {
-      active = false;
-    };
-  }, [authUser, selectedOutletId]);
-  const showToast = (next: Toast) => {
-    setToast(next);
-    window.setTimeout(() => setToast(null), 3000);
-  };
-  useEffect(() => {
-    if (
-      activePage === "dashboard" ||
-      activePage === "forecast" ||
-      activePage === "inventory"
-    ) {
-      void refreshProducts();
+  }, [approvedRole, selectedOutletId, showToast]);
+
+  const refreshOrders = useCallback(async () => {
+    if (!supabase || profile?.role !== "admin" || !selectedOutletId) return;
+    setOrdersLoading(true);
+    setOrdersError(null);
+    try {
+      const rows = await listSupabasePurchaseOrders(selectedOutletId);
+      setOrders(rows.map(order => ({
+        dbId: order.id,
+        id: order.order_number,
+        supplier: order.supplier,
+        product: order.product_name,
+        qty: Number(order.qty),
+        unit: order.unit,
+        unitCost: Number(order.unit_cost),
+        total: Number(order.total),
+        reason: order.reason,
+        status: order.status,
+        created: new Date(order.created_at).toLocaleDateString("id-ID"),
+      })));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Purchase order gagal dimuat dari Supabase.";
+      setOrders([]);
+      setOrdersError(message);
+      showToast({ tone: "warning", message: `Purchase order gagal dimuat: ${message}` });
+    } finally {
+      setOrdersLoading(false);
     }
-  }, [activePage, refreshProducts]);
+  }, [profile?.role, selectedOutletId, showToast]);
+
+  useEffect(() => {
+    if (!supabase || !approvedRole) return;
+    let active = true;
+    setWorkspaceLoading(true);
+    setWorkspaceLoaded(false);
+    setWorkspaceError(null);
+    Promise.all([
+      listSupabaseOutlets(),
+      listSupabaseCategories(),
+      profile?.role === "admin" ? listSupabaseSuppliers() : Promise.resolve([]),
+    ])
+      .then(([outletRows, categories, suppliers]) => {
+        if (!active) return;
+        setOutlets(outletRows);
+        setCategoryOptions(categories);
+        setSupplierRecords(suppliers);
+        setSelectedOutletId(current =>
+          outletRows.some(outlet => outlet.id === current)
+            ? current
+            : outletRows[0]?.id || 0
+        );
+        setWorkspaceLoaded(true);
+      })
+      .catch(error => {
+        if (!active) return;
+        const message = error instanceof Error ? error.message : "Data workspace gagal dimuat.";
+        setWorkspaceError(message);
+        showToast({ tone: "warning", message: `Workspace gagal dimuat: ${message}` });
+      })
+      .finally(() => {
+        if (active) setWorkspaceLoading(false);
+      });
+    return () => { active = false; };
+  }, [approvedRole, profile?.role, showToast, workspaceRetry]);
+
+  useEffect(() => {
+    if (!approvedRole || !selectedOutletId) return;
+    void refreshProducts();
+  }, [approvedRole, refreshProducts, selectedOutletId]);
+
+  useEffect(() => {
+    setProducts([]);
+    setProductsLoaded(false);
+    setProductError(null);
+    setOrders([]);
+    setOrdersError(null);
+    setTaxRate(null);
+    setTaxRateLoaded(false);
+  }, [selectedOutletId]);
+
+  useEffect(() => {
+    if (!approvedRole || profile?.role !== "admin" || !selectedOutletId) return;
+    void refreshOrders();
+  }, [approvedRole, activePage, profile?.role, refreshOrders, selectedOutletId]);
+
+  useEffect(() => {
+    if (!approvedRole || !selectedOutletId) return;
+    let active = true;
+    setTaxRateLoaded(false);
+    setTaxRateError(null);
+    getSupabaseTaxRate(selectedOutletId)
+      .then(rate => { if (active) { setTaxRate(rate); setTaxRateLoaded(true); } })
+      .catch(error => {
+        if (!active) return;
+        const message = error instanceof Error ? error.message : "Tarif pajak gagal dimuat.";
+        setTaxRate(null);
+        setTaxRateError(message);
+        setTaxRateLoaded(true);
+      });
+    return () => { active = false; };
+  }, [approvedRole, selectedOutletId, taxRetry]);
+
   useEffect(() => {
     if (!supabase) return;
+    let active = true;
     const profileFailure = (error: unknown) => {
+      if (!active) return;
       setProfile(null);
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Role profile tidak dapat dibaca.";
-      showToast({
-        tone: "warning",
-        message: `Login berhasil, tetapi profile/RLS gagal dibaca: ${message}`,
-      });
+      const message = error instanceof Error ? error.message : "Role profile tidak dapat dibaca.";
+      showToast({ tone: "warning", message: `Login berhasil, tetapi profile/RLS gagal dibaca: ${message}` });
     };
-    supabase.auth
-      .getSession()
+    supabase.auth.getSession()
       .then(({ data, error }) => {
         if (error) throw error;
+        if (!active) return;
         const user = data.session?.user ?? null;
         setAuthUser(user);
-        if (user) return getCurrentProfile().then(setProfile);
+        if (user) return getCurrentProfile().then(value => { if (active) setProfile(value); });
         setProfile(null);
       })
       .catch(profileFailure);
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setAuthUser(session?.user || null);
-        if (session)
-          window.setTimeout(
-            () => getCurrentProfile().then(setProfile).catch(profileFailure),
-            0
-          );
-        else setProfile(null);
-      }
-    );
-    return () => listener.subscription.unsubscribe();
-  }, []);
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user || null);
+      if (session)
+        window.setTimeout(() => getCurrentProfile().then(value => { if (active) setProfile(value); }).catch(profileFailure), 0);
+      else setProfile(null);
+    });
+    return () => { active = false; listener.subscription.unsubscribe(); };
+  }, [showToast]);
+
   const googleLogin = async () => {
-    if (!supabase)
-      return showToast({
-        tone: "warning",
-        message: "Google Auth belum dikonfigurasi.",
-      });
+    if (!supabase) return showToast({ tone: "warning", message: "Google Auth belum dikonfigurasi." });
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: window.location.origin },
     });
     if (error) showToast({ tone: "warning", message: error.message });
   };
+
   const googleLogout = async () => {
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
-    showToast(
-      error
-        ? { tone: "warning", message: error.message }
-        : { tone: "success", message: "Anda sudah keluar dari Google Auth." }
-    );
+    showToast(error
+      ? { tone: "warning", message: error.message }
+      : { tone: "success", message: "Anda sudah keluar dari Google Auth." });
   };
-  const createDraft = async (product: Product) => {
-    const qty = Math.max(10, Math.ceil(product.dailySales * 7));
-    const existing = orders.find(
-      order => order.product === product.name && order.status === "Draft"
-    );
+
+  const createDraft = async (product?: Product) => {
+    if (!product) return showToast({ tone: "info", message: "Belum ada produk untuk dibuatkan draft." });
+    if (!product.historyDays || product.dailySales <= 0)
+      return showToast({ tone: "info", message: `Belum cukup riwayat transaksi untuk menghitung kebutuhan ${product.name}.` });
+    if (!product.supplier)
+      return showToast({ tone: "warning", message: `Pilih supplier untuk ${product.name} sebelum membuat purchase order.` });
+    const forecast = calculateForecast(product.stock, product.minStock, product.dailySales, product.supplierLeadTimeDays || 0);
+    const qty = forecast.reorderQuantity;
+    if (qty <= 0) return showToast({ tone: "info", message: `Stok ${product.name} belum membutuhkan reorder.` });
+    const existing = orders.find(order => order.product === product.name && order.status === "Draft");
     if (existing) {
-      setForecastProduct(null);
       setActivePage("orders");
-      return showToast({
-        tone: "info",
-        message: `Draft ${product.name} sudah tersedia.`,
-      });
+      return showToast({ tone: "info", message: `Draft ${product.name} sudah tersedia.` });
     }
-    const reason = `Forecast menunjukkan stok akan habis dalam ${Math.max(1, Math.ceil(getCoverage(product)))} hari.`;
-    let createdId: string;
+    const reason = `Rata-rata demand ${number(product.dailySales)} ${product.unit}/hari; stok ${number(product.stock)}; lead time ${product.supplierLeadTimeDays ?? "tidak tersedia"} hari.`;
     try {
-      const created = await insertSupabasePurchaseOrder({
+      await insertSupabasePurchaseOrder({
         outlet_id: selectedOutletId,
         supplier: product.supplier,
         product_id: product.id,
@@ -4309,161 +2886,78 @@ export default function Home() {
         unit_cost: product.cost,
         reason,
       });
-      createdId = created.order_number;
+      await refreshOrders();
+      setActivePage("orders");
+      showToast({ tone: "success", message: `Draft pesanan ${product.name} berhasil dibuat.` });
     } catch (error) {
-      return showToast({
-        tone: "warning",
-        message:
-          error instanceof Error
-            ? `Draft gagal disimpan: ${error.message}`
-            : "Draft gagal disimpan ke Supabase.",
-      });
+      showToast({ tone: "warning", message: error instanceof Error ? `Draft gagal disimpan: ${error.message}` : "Draft gagal disimpan ke Supabase." });
     }
-    setOrders(current => [
-      {
-        id: createdId,
-        supplier: product.supplier,
-        product: product.name,
-        qty,
-        unit: product.unit,
-        unitCost: product.cost,
-        total: qty * product.cost,
-        reason,
-        status: "Draft",
-        created: new Date().toLocaleDateString("id-ID"),
-      },
-      ...current,
-    ]);
-    setForecastProduct(null);
-    setActivePage("orders");
-    showToast({
-      tone: "success",
-      message: `Draft pesanan ${product.name} berhasil dibuat.`,
-    });
   };
+
+  const changeOrderStatus = async (orderNumber: string) => {
+    try {
+      await updateSupabasePurchaseOrderStatus(orderNumber, selectedOutletId, "Ordered");
+      await refreshOrders();
+      showToast({ tone: "success", message: `${orderNumber} dikonfirmasi dan dikirim ke supplier.` });
+    } catch (error) {
+      showToast({ tone: "warning", message: error instanceof Error ? `Status order gagal disimpan: ${error.message}` : "Status order gagal disimpan ke Supabase." });
+    }
+  };
+
+  const receiveOrder = async (order: PurchaseOrder) => {
+    try {
+      await receiveSupabasePurchaseOrder(order.dbId);
+      await Promise.all([refreshOrders(), refreshProducts()]);
+      showToast({ tone: "success", message: `${order.id} diterima; stok produk diperbarui.` });
+    } catch (error) {
+      showToast({ tone: "warning", message: error instanceof Error ? `Penerimaan order gagal: ${error.message}` : "Penerimaan order gagal." });
+    }
+  };
+
+  const editOrder = async (order: PurchaseOrder) => {
+    const qty = Number(window.prompt("Jumlah", String(order.qty)));
+    if (!Number.isFinite(qty) || qty <= 0) return showToast({ tone: "warning", message: "Jumlah harus lebih besar dari nol." });
+    const unitCost = Number(window.prompt("Harga satuan", String(order.unitCost)));
+    if (!Number.isFinite(unitCost) || unitCost < 0) return showToast({ tone: "warning", message: "Harga satuan tidak valid." });
+    const supplier = window.prompt("Supplier", order.supplier);
+    if (!supplier?.trim()) return;
+    const reason = window.prompt("Alasan order", order.reason);
+    if (reason === null) return;
+    try {
+      await updateSupabasePurchaseOrder(order.id, selectedOutletId, {
+        supplier: supplier.trim(), qty, unit_cost: unitCost, reason: reason.trim(),
+      });
+      await refreshOrders();
+      showToast({ tone: "success", message: `${order.id} berhasil diperbarui.` });
+    } catch (error) {
+      showToast({ tone: "warning", message: error instanceof Error ? `Order gagal diperbarui: ${error.message}` : "Order gagal diperbarui." });
+    }
+  };
+
+  const deleteOrder = async (order: PurchaseOrder) => {
+    if (!window.confirm(`Hapus draft ${order.id}?`)) return;
+    try {
+      await deleteSupabasePurchaseOrder(order.id, selectedOutletId);
+      await refreshOrders();
+      showToast({ tone: "success", message: `${order.id} berhasil dihapus.` });
+    } catch (error) {
+      showToast({ tone: "warning", message: error instanceof Error ? `Draft gagal dihapus: ${error.message}` : "Draft gagal dihapus." });
+    }
+  };
+
   const effectivePage = profile?.role === "admin" ? activePage : "pos";
-  const content = useMemo(() => {
-    if (effectivePage === "dashboard")
-      return (
-        <Dashboard
-          products={products}
-          setActivePage={setActivePage}
-          onForecast={setForecastProduct}
-          onToast={showToast}
-        />
-      );
-    if (effectivePage === "pos")
-      return (
-        <POS
-          products={products}
-          setProducts={setProducts}
-          outletId={selectedOutletId}
-          onToast={showToast}
-          onTransaction={async () => {
-            await refreshProducts();
-            showToast({
-              tone: "success",
-              message:
-                "Penjualan tercatat. Dashboard dan AI Forecast sudah diperbarui.",
-            });
-          }}
-          hasSupabaseSession={Boolean(authUser)}
-        />
-      );
-    if (effectivePage === "inventory")
-      return (
-        <Inventory
-          products={products}
-          setProducts={setProducts}
-          outletId={selectedOutletId}
-          onToast={showToast}
-          canWriteSupabase={profile?.role === "admin"}
-        />
-      );
-    if (effectivePage === "forecast")
-      return (
-        <Forecast
-          products={products}
-          onCreateDraft={createDraft}
-          onToast={showToast}
-        />
-      );
-    if (effectivePage === "orders")
-      return (
-        <Orders
-          onCreateDraft={() =>
-            createDraft(
-              products.find(product => getRisk(product) !== "Sehat") ||
-                products[0]
-            )
-          }
-          orders={orders}
-          onConfirm={async id => {
-            try {
-              await updateSupabasePurchaseOrderStatus(
-                id,
-                selectedOutletId,
-                "Ordered"
-              );
-            } catch (error) {
-              return showToast({
-                tone: "warning",
-                message:
-                  error instanceof Error
-                    ? `Status order gagal disimpan: ${error.message}`
-                    : "Status order gagal disimpan ke Supabase.",
-              });
-            }
-            setOrders(current =>
-              current.map(order =>
-                order.id === id ? { ...order, status: "Ordered" } : order
-              )
-            );
-            showToast({
-              tone: "success",
-              message: `${id} dikonfirmasi dan dikirim ke supplier.`,
-            });
-          }}
-          onToast={showToast}
-        />
-      );
-    if (effectivePage === "suppliers") return <Suppliers onToast={showToast} />;
-    if (effectivePage === "settings")
-      return (
-        <SettingsPage
-          onToast={showToast}
-          authUser={authUser}
-          onGoogleLogin={googleLogin}
-          onGoogleLogout={googleLogout}
-        />
-      );
-    if (effectivePage === "help")
-      return <HelpCenter onToast={showToast} onNavigate={setActivePage} />;
-    return <Reports onToast={showToast} />;
-  }, [
-    effectivePage,
-    products,
-    orders,
-    authUser,
-    refreshProducts,
-    selectedOutletId,
-  ]);
-  const currentUser =
-    authUser
-      ? {
-          name:
-            profile?.full_name ||
-            authUser.user_metadata?.full_name ||
-            authUser.email,
-          email: authUser.email,
-          role: profile?.role || "pending",
-        }
-      : null;
+  const displayName = authUser
+    ? resolveDisplayName(profile?.full_name, authUser.user_metadata?.full_name, profile?.username, authUser.email)
+    : "Pengguna";
+  const currentUser = authUser
+    ? { name: displayName, email: authUser.email, role: profile?.role || "pending" }
+    : null;
   const openAuthenticatedWorkspace = () => setActivePage("dashboard");
+
   useEffect(() => {
-    if (authUser && profile?.role === "kasir" && activePage !== "pos")
-      setActivePage("pos");
+    if (authUser && profile?.role === "kasir" && activePage !== "pos") setActivePage("pos");
   }, [authUser, profile?.role, activePage]);
+
   const handleLogout = async () => {
     try {
       if (!supabase) throw new Error("Supabase belum dikonfigurasi.");
@@ -4471,48 +2965,59 @@ export default function Home() {
       if (error) throw error;
       setNotificationsOpen(false);
       setActivePage("dashboard");
-      showToast({
-        tone: "success",
-        message: "Anda sudah keluar. Silakan login kembali.",
-      });
+      showToast({ tone: "success", message: "Anda sudah keluar. Silakan login kembali." });
     } catch (error) {
-      showToast({
-        tone: "warning",
-        message:
-          error instanceof Error
-            ? `Logout gagal: ${error.message}`
-            : "Logout gagal melalui Supabase Auth.",
-      });
+      showToast({ tone: "warning", message: error instanceof Error ? `Logout gagal: ${error.message}` : "Logout gagal melalui Supabase Auth." });
     }
   };
-  if (!authUser)
-    return (
-      <AuthLanding
-        onAuthenticated={openAuthenticatedWorkspace}
-        onGoogle={googleLogin}
-        onToast={showToast}
-      />
-    );
+
+  const inventoryAttention = productsForUi.filter(product =>
+    getRisk(product) === "Tinggi" || getRisk(product) === "Sedang" || getRisk(product) === "Habis"
+  ).length;
+  const dataStatus: "loading" | "live" | "error" =
+    workspaceError || productError || taxRateError
+      ? "error"
+      : workspaceLoading || !workspaceLoaded || supabaseLoading || !productsLoaded || !taxRateLoaded
+        ? "loading"
+        : "live";
+
+  if (!authUser) return <AuthLanding onAuthenticated={openAuthenticatedWorkspace} onGoogle={googleLogin} onToast={showToast} />;
   if (profile?.role !== "admin" && profile?.role !== "kasir")
     return (
       <div className="min-h-screen bg-[var(--canvas)] px-4 py-12">
         <section className="mx-auto max-w-lg rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-8 text-center shadow-sm">
-          <h1 className="text-xl font-semibold text-[var(--ink)]">
-            Akun menunggu persetujuan
-          </h1>
-          <p className="mt-3 text-sm leading-6 text-[var(--ink-soft)]">
-            Login berhasil, tetapi akun ini belum memiliki role Kopipintar yang
-            disetujui. Hubungi administrator untuk meminta akses.
-          </p>
-          <button
-            className="button button-secondary mt-6 justify-center"
-            onClick={() => void handleLogout()}
-          >
-            Keluar
-          </button>
+          <h1 className="text-xl font-semibold text-[var(--ink)]">Akun menunggu persetujuan</h1>
+          <p className="mt-3 text-sm leading-6 text-[var(--ink-soft)]">Login berhasil, tetapi akun ini belum memiliki role Kopipintar yang disetujui. Hubungi administrator untuk meminta akses.</p>
+          <button className="button button-secondary mt-6 justify-center" onClick={() => void handleLogout()}>Keluar</button>
         </section>
       </div>
     );
+
+  let content: React.ReactNode;
+  if (workspaceError) {
+    content = <div className="empty-state" role="alert"><b>Workspace gagal dimuat</b><span>{workspaceError}</span><button className="button button-secondary" onClick={() => setWorkspaceRetry(current => current + 1)}>Coba lagi</button></div>;
+  } else if (!selectedOutlet && workspaceLoaded) {
+    content = <div className="empty-state"><b>Belum ada outlet aktif</b><span>Tambahkan outlet di Supabase sebelum menggunakan aplikasi.</span></div>;
+  } else if (effectivePage === "dashboard") {
+    content = <DashboardLive products={productsForUi} outletId={selectedOutletId} outletName={selectedOutlet ? `${selectedOutlet.name} - ${selectedOutlet.city}` : ""} userName={displayName} productLoading={supabaseLoading} productError={productError} onRetryProducts={refreshProducts} onPage={setActivePage} onForecast={product => { setForecastProductId(product.id); setActivePage("forecast"); }} />;
+  } else if (effectivePage === "pos") {
+    content = <POS products={productsForUi} setProducts={setProducts} outletId={selectedOutletId} onToast={showToast} onTransaction={async () => { await refreshProducts(); showToast({ tone: "success", message: "Penjualan tercatat dan stok diperbarui dari Supabase." }); }} hasSupabaseSession={Boolean(authUser)} categoryNames={categoryOptions.map(item => item.name)} taxRate={taxRate} outletName={selectedOutlet?.name || ""} productLoading={supabaseLoading} productError={productError} taxRateError={taxRateError} onRefreshProducts={refreshProducts} onRetryTaxRate={() => setTaxRetry(current => current + 1)} />;
+  } else if (effectivePage === "inventory") {
+    content = <Inventory products={productsForUi} setProducts={setProducts} outletId={selectedOutletId} onToast={showToast} canWriteSupabase={profile?.role === "admin"} categoryOptions={categoryOptions} supplierOptions={supplierRecords} loading={supabaseLoading} loadError={productError} onRefresh={refreshProducts} />;
+  } else if (effectivePage === "forecast") {
+    content = <ForecastLive products={productsForUi} onCreateDraft={product => void createDraft(product)} onRefresh={() => void refreshProducts()} initialProductId={forecastProductId} loading={supabaseLoading} error={productError} />;
+  } else if (effectivePage === "orders") {
+    content = <Orders orders={orders} loading={ordersLoading} error={ordersError} onRefresh={() => void refreshOrders()} onCreateDraft={() => void createDraft(productsForUi.find(product => getRisk(product) !== "Sehat"))} onConfirm={id => void changeOrderStatus(id)} onReceive={order => void receiveOrder(order)} onEdit={order => void editOrder(order)} onDelete={order => void deleteOrder(order)} onToast={showToast} />;
+  } else if (effectivePage === "suppliers") {
+    content = <SuppliersLive products={productsForUi} onToast={showToast} />;
+  } else if (effectivePage === "settings") {
+    content = <SettingsPage onToast={showToast} authUser={authUser} displayName={displayName} outlet={selectedOutlet} taxRate={taxRate} onGoogleLogin={googleLogin} onGoogleLogout={googleLogout} />;
+  } else if (effectivePage === "help") {
+    content = <HelpCenter onToast={showToast} onNavigate={setActivePage} />;
+  } else {
+    content = <ReportsLive outletId={selectedOutletId} onToast={showToast} />;
+  }
+
   return (
     <div className="shell-wrap">
       <AppShell
@@ -4521,56 +3026,17 @@ export default function Home() {
         onNotifications={() => setNotificationsOpen(current => !current)}
         outlets={outlets}
         selectedOutletId={selectedOutletId}
-        onOutletChange={id => {
-          setSelectedOutletId(id);
-          showToast({
-            tone: "info",
-            message: `Berpindah ke ${outlets.find(outlet => outlet.id === id)?.name || "outlet"}.`,
-          });
-        }}
+        onOutletChange={id => setSelectedOutletId(id)}
         user={currentUser}
         onLogout={handleLogout}
+        inventoryAttention={inventoryAttention}
+        dataStatus={dataStatus}
       >
         {content}
       </AppShell>
-      {supabaseLoading && (
-        <div
-          style={{
-            position: "fixed",
-            top: 76,
-            right: 24,
-            zIndex: 40,
-            padding: "8px 12px",
-            borderRadius: 999,
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-            color: "var(--ink-soft)",
-            fontSize: 11,
-            boxShadow: "0 8px 18px rgba(35,56,46,.08)",
-          }}
-        >
-          Memuat data live…
-        </div>
-      )}
-      {notificationsOpen && (
-        <NotificationPanel
-          onClose={() => setNotificationsOpen(false)}
-          onNavigate={setActivePage}
-        />
-      )}
-      {forecastProduct && (
-        <ForecastQuickModal
-          product={forecastProduct}
-          onClose={() => setForecastProduct(null)}
-          onCreateDraft={createDraft}
-        />
-      )}
-      {toast && (
-        <div className={`toast ${toast.tone}`}>
-          <Check size={16} />
-          {toast.message}
-        </div>
-      )}
+      {supabaseLoading && <div className="fixed right-6 top-20 z-40 rounded-full border bg-white px-3 py-2 text-xs shadow">Memuat data Supabase...</div>}
+      {notificationsOpen && <NotificationPanel onClose={() => setNotificationsOpen(false)} onNavigate={setActivePage} products={productsForUi} />}
+      {toast && <div className={`toast toast-${toast.tone}`}><span className="live-dot" />{toast.message}<button onClick={() => setToast(null)} aria-label="Tutup notifikasi"><X size={15} /></button></div>}
     </div>
   );
 }

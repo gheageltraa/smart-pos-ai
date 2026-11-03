@@ -9,12 +9,15 @@ The production app is a static Vite/React frontend using `@supabase/supabase-js`
 - Supabase profiles determine Admin/Kasir role. Kasir is restricted to POS in the UI and by RLS.
 - Inventory, suppliers, purchase orders, and product reads use Supabase queries.
 - Checkout calls the `create_pos_sale` database function to validate current prices/stock and atomically write a sale and its items.
-- Admin forecast reads sales history from Supabase; the explanation is calculated locally.
-- Reports currently display sample data rather than live Supabase reports.
+- Dashboard, reports, and forecast read sales, item, stock, category, outlet, and supplier data from Supabase.
+- Reports and CSV exports use the same live date range. Profit is calculated from captured `sale_items.line_total` and `unit_cost`; operating expenses are not present in the schema and are not represented.
+- Bundle revenue/profit stays attributed to the sold bundle row. Forecast demand also expands sold bundle quantities into their component usage.
+- POS tax uses the historical weighted tax rate for that outlet; when no transactions establish a rate, the rate is zero until real transaction data exists.
+- Receiving an ordered purchase order calls an admin-only atomic RPC that updates stock once.
 
 ## Database and account setup
 
-For a new demo project, run `pnpm db:setup` with `SUPABASE_DB_URL` available only in the setup environment. Then run [`../supabase/static_frontend.sql`](../supabase/static_frontend.sql) in the Supabase SQL Editor. Provision demo accounts with `pnpm auth:seed` using `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` locally. Neither server secret is needed by the frontend or Vercel.
+For a new project, run database SQL files in this order: `schema.sql`, `functional_features.sql`, `icon_name_migration.sql`, `bundle_migration.sql`, `static_frontend.sql`, then [`../supabase/reporting.sql`](../supabase/reporting.sql). Optionally run [`../supabase/seed_demo_sales.sql`](../supabase/seed_demo_sales.sql) last for marked demo sales only. On an existing project, rerun the updated `static_frontend.sql` before `reporting.sql`. Alternatively, `pnpm db:setup` bootstraps the demo schema; then apply `static_frontend.sql` and `reporting.sql`. Provision demo accounts with `pnpm auth:seed` using `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` locally. Neither server secret is needed by the frontend or Vercel.
 
 The migration enables RLS, admin-only inventory/supplier/order management, role-validated checkout, and ownership checks on cashier sales. Keep it applied before deploying the client.
 

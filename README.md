@@ -122,7 +122,9 @@ smart-pos-ai/
 │   ├── functional_features.sql    ← Fitur operasional (supplier, purchase order, dll.)
 │   ├── icon_name_migration.sql    ← Kolom ikon produk
 │   ├── bundle_migration.sql       ← Produk paket + trigger stok bahan
-│   └── static_frontend.sql        ← Fungsi checkout, profil "pending", kebijakan RLS
+│   ├── static_frontend.sql        ← Fungsi checkout, profil "pending", kebijakan RLS
+│   ├── reporting.sql              ← Agregat laporan, demand, dan penerimaan PO atomik
+│   └── seed_demo_sales.sql        ← Opsional: transaksi demo bertanda DEMO-
 │
 ├── scripts/                 ← Skrip bantuan yang dijalankan manual di komputer
 │   ├── db-setup.js          ← Membuat tabel + data contoh (aman dijalankan ulang)
@@ -192,6 +194,21 @@ Di Supabase → **SQL Editor**, jalankan file berikut **berurutan**:
 3. `supabase/icon_name_migration.sql`
 4. `supabase/bundle_migration.sql`
 5. `supabase/static_frontend.sql`
+6. `supabase/reporting.sql`
+7. (Opsional, hanya untuk demo) `supabase/seed_demo_sales.sql`
+
+`reporting.sql` menghormati RLS; laporan mengelompokkan tanggal dalam zona
+Asia/Jakarta. Revenue dan profit bundle tetap tercatat pada produk bundle yang
+terjual, sementara kebutuhan komponennya ikut dihitung untuk forecasting dan
+stok. Fungsi penerimaan PO hanya untuk Admin dan menambah stok sekali.
+
+Untuk database yang sudah memakai versi lama, jalankan ulang
+`static_frontend.sql`, lalu `reporting.sql`. Ini memperbarui fungsi checkout
+dan memasang fungsi laporan serta penerimaan purchase order.
+
+Jalankan `seed_demo_sales.sql` hanya jika dibutuhkan untuk demo. Baris yang
+dibuat memakai nomor transaksi `DEMO-`, tidak mengurangi stok, dan dapat
+dihapus terpisah memakai instruksi komentar di file tersebut.
 
 ### Jalur B — Lewat skrip
 
@@ -284,7 +301,7 @@ Akun Google baru masuk sebagai **pending** dan harus disetujui admin (lihat [Per
 2. **Cetak struk** memakai `window.print()` browser, belum terhubung ke printer thermal tertentu.
 3. **Scan barcode** belum terhubung ke perangkat scanner.
 4. **AI Forecast** memakai perhitungan statistik dari riwayat penjualan, bukan model machine learning.
-5. **Laporan:** grafik dan total keuangan di halaman Laporan saat ini masih data contoh, belum sepenuhnya dari Supabase.
+5. **Laporan:** grafik, ringkasan profit, kategori, produk terlaris, dan metode pembayaran dibaca dari transaksi Supabase pada rentang tanggal terpilih. Biaya operasional tidak tersedia di skema sehingga tidak dihitung sebagai laba bersih.
 6. Dukungan **multi-outlet** masih dasar.
 7. Cocok untuk kompetisi dan demo; perlu penguatan keamanan sebelum dipakai komersial.
 
