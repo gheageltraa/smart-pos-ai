@@ -340,6 +340,7 @@ function AuthLanding({
   const [busy, setBusy] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [showDemo, setShowDemo] = useState(false);
 
   useEffect(() => {
     try {
@@ -537,11 +538,140 @@ function AuthLanding({
           >
             Masuk dengan Google
           </button>
+          <button
+            className="button button-secondary mt-2 w-full justify-center"
+            onClick={() => setShowDemo(true)}
+          >
+            <Sparkles size={15} /> Jelajahi demo interaktif
+          </button>
           <small className="mt-4 block leading-[1.5] text-[var(--ink-muted)]">
             Gunakan akun operator yang sudah dibuat di Supabase Auth.
           </small>
         </section>
       </div>
+      {showDemo && <DemoPreview onClose={() => setShowDemo(false)} />}
+    </div>
+  );
+}
+
+function DemoPreview({ onClose }: { onClose: () => void }) {
+  const [activeTab, setActiveTab] = useState<"Ringkasan" | "Stok" | "Forecast" | "Kasir">("Ringkasan");
+  const [demoCart, setDemoCart] = useState(0);
+  const [saleComplete, setSaleComplete] = useState(false);
+  const tabs = ["Ringkasan", "Stok", "Forecast", "Kasir"] as const;
+  const sampleProducts = [
+    { name: "Kopi Susu Gula Aren", sku: "KOP-001", stock: 8, minimum: 12, status: "Rendah" },
+    { name: "Matcha Latte", sku: "TEA-014", stock: 24, minimum: 10, status: "Sehat" },
+    { name: "Croissant Butter", sku: "FOD-008", stock: 3, minimum: 8, status: "Kritis" },
+  ];
+  const bars = [38, 57, 46, 72, 61, 91, 76];
+
+  return (
+    <div
+      className="modal-backdrop"
+      onClick={event => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="demo-title"
+        style={{ width: "min(100%, 980px)", padding: 22 }}
+      >
+        <button className="modal-close" onClick={onClose} aria-label="Tutup demo">
+          <X size={17} />
+        </button>
+        <div className="flex flex-wrap items-start justify-between gap-4 pr-9">
+          <div>
+            <div className="ai-kicker"><Sparkles size={13} /> KOPIPINTAR / DEMO INTERAKTIF</div>
+            <h2 id="demo-title" className="mt-2 font-serif text-2xl font-medium text-[var(--ink)]">Operasional kedai, sekilas terlihat.</h2>
+            <p className="mt-2 max-w-2xl text-xs leading-relaxed text-[var(--ink-soft)]">Jelajahi contoh dashboard, stok, perkiraan restock, dan alur kasir. Semua angka di sini adalah data contoh.</p>
+          </div>
+          <span className="badge badge-blue"><span className="badge-dot" /> DATA CONTOH</span>
+        </div>
+
+        <div className="report-tabs mt-5 max-w-full overflow-x-auto" role="tablist" aria-label="Bagian demo">
+          {tabs.map(tab => (
+            <button
+              key={tab}
+              role="tab"
+              aria-selected={activeTab === tab}
+              className={activeTab === tab ? "active" : ""}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "Ringkasan" && (
+          <div className="animate-in fade-in duration-300">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div><h3 className="text-sm font-bold text-[var(--ink)]">Kedai Bumi · Senopati</h3><p className="mt-1 text-[10px] text-[var(--ink-muted)]">Ringkasan operasional hari ini</p></div>
+              <span className="badge badge-green">● Outlet aktif</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                ["Penjualan", "Rp 4.820.000", "+12,4%"],
+                ["Transaksi", "76", "vs kemarin"],
+                ["Estimasi profit", "Rp 1.640.000", "Margin 34%"],
+                ["Perlu restock", "4 produk", "2 prioritas"],
+              ].map(([label, value, note]) => (
+                <div className="metric-card accent-mint" key={label}>
+                  <div className="metric-label mt-0">{label}</div>
+                  <div className="metric-value text-base sm:text-lg">{value}</div>
+                  <div className="metric-note">{note}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-[1.4fr_1fr]">
+              <section className="panel min-w-0 p-4">
+                <div className="flex items-start justify-between gap-3"><div><h3 className="text-xs font-bold">Performa penjualan</h3><p className="mt-1 text-[10px] text-[var(--ink-muted)]">7 hari terakhir</p></div><b className="text-sm text-[var(--mint-dark)]">Rp 28,6 jt</b></div>
+                <div className="mt-4 flex h-28 items-end justify-between gap-2 border-b border-l border-[var(--line)] px-2">
+                  {bars.map((height, index) => <div key={index} className="flex h-full flex-1 items-end"><span className="w-full rounded-t-sm bg-[var(--mint)]" style={{ height: `${height}%`, opacity: index === 5 ? 1 : 0.35 + index * 0.08 }} /></div>)}
+                </div>
+                <div className="mt-2 flex justify-between text-[9px] text-[var(--ink-muted)]"><span>Sen</span><span>Sel</span><span>Rab</span><span>Kam</span><span>Jum</span><span>Sab</span><span>Min</span></div>
+              </section>
+              <section className="panel p-4">
+                <div className="ai-kicker"><Sparkles size={12} /> INSIGHT</div>
+                <h3 className="mt-2 text-sm font-bold">Croissant Butter hampir habis</h3>
+                <p className="mt-2 text-[10px] leading-relaxed text-[var(--ink-soft)]">Dengan penjualan rata-rata 5 unit per hari, stok diperkirakan habis dalam kurang dari 1 hari.</p>
+                <div className="mt-3 rounded-lg bg-[var(--amber-soft)] px-3 py-2 text-[10px] font-semibold text-[#8b6428]">Saran: restock 24 unit sebelum besok.</div>
+              </section>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "Stok" && (
+          <section className="panel overflow-hidden p-0">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-4"><div><h3 className="text-sm font-bold">Kondisi inventory</h3><p className="mt-1 text-[10px] text-[var(--ink-muted)]">Pantau stok dan minimum setiap produk.</p></div><span className="badge badge-amber">4 perlu restock</span></div>
+            <div className="table-wrap"><table className="data-table min-w-[560px]"><thead><tr><th>Produk</th><th>SKU</th><th>Stok</th><th>Minimum</th><th>Status</th></tr></thead><tbody>
+              {sampleProducts.map(product => <tr key={product.sku}><td><b>{product.name}</b></td><td className="mono-text">{product.sku}</td><td><b>{product.stock} unit</b></td><td>{product.minimum} unit</td><td><span className={`badge ${product.status === "Sehat" ? "badge-green" : product.status === "Rendah" ? "badge-amber" : "badge-red"}`}>{product.status}</span></td></tr>)}
+            </tbody></table></div>
+            <p className="px-4 py-3 text-[10px] text-[var(--ink-muted)]">Penjualan di POS otomatis mengurangi stok produk dan komponen paket.</p>
+          </section>
+        )}
+
+        {activeTab === "Forecast" && (
+          <div className="grid gap-3 md:grid-cols-[1fr_1fr]">
+            <section className="forecast-hero min-h-0 p-5 md:p-6"><div><div className="ai-kicker text-[#bfe5cf]"><Sparkles size={13} /> PERKIRAAN BERBASIS DATA</div><h3 className="mt-3 font-serif text-2xl text-white">Restock sebelum stok habis.</h3><p className="mt-2 max-w-lg text-xs leading-relaxed text-[#b8c7c3]">Demand harian dihitung dari transaksi aktual, termasuk pemakaian komponen dalam bundle.</p><div className="forecast-method mt-4"><span><Check size={13} /> Riwayat penjualan</span><span><Check size={13} /> Lead time supplier</span></div></div></section>
+            <section className="panel p-4"><h3 className="text-sm font-bold">Prioritas hari ini</h3>
+              {[ ["Croissant Butter", "Stok habis ±0,6 hari", "24 unit"], ["Kopi Susu Gula Aren", "Stok habis ±1,8 hari", "30 unit"], ["Susu Oat", "Stok habis ±3 hari", "12 unit"] ].map(([name, timing, quantity], index) => <div className="flex items-center gap-3 border-b border-[var(--line)] py-3 last:border-0" key={name}><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold ${index === 0 ? "bg-[var(--red-soft)] text-[var(--red)]" : "bg-[var(--amber-soft)] text-[var(--amber)]"}`}>{index + 1}</span><div className="min-w-0 flex-1"><b className="block truncate text-xs">{name}</b><small className="text-[10px] text-[var(--ink-muted)]">{timing}</small></div><b className="text-xs text-[var(--mint-dark)]">{quantity}</b></div>)}
+            </section>
+          </div>
+        )}
+
+        {activeTab === "Kasir" && (
+          <div className="grid gap-3 md:grid-cols-[1fr_.8fr]">
+            <section className="panel p-4"><div className="panel-header"><div><h3 className="text-sm font-bold">POS / Kasir</h3><p>Contoh katalog produk yang siap dijual.</p></div><ShoppingCart size={18} className="muted-icon" /></div>
+              {[ ["Kopi Susu Gula Aren", "Rp 28.000"], ["Matcha Latte", "Rp 32.000"], ["Croissant Butter", "Rp 24.000"] ].map(([name, price]) => <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] py-3 last:border-0" key={name}><div><b className="text-xs">{name}</b><small className="mt-1 block text-[10px] text-[var(--ink-muted)]">{price}</small></div><button className="button button-secondary min-h-8 px-3" onClick={() => { setDemoCart(count => count + 1); setSaleComplete(false); }}><Plus size={14} /> Tambah</button></div>)}
+            </section>
+            <section className="panel flex flex-col p-4"><h3 className="text-sm font-bold">Keranjang demo</h3><div className="my-4 flex flex-1 items-center justify-center rounded-lg bg-[var(--paper)] p-4 text-center"><div><ShoppingCart size={24} className="mx-auto text-[var(--mint)]" /><b className="mt-2 block text-sm">{demoCart} item</b><span className="text-[10px] text-[var(--ink-muted)]">Total simulasi Rp {new Intl.NumberFormat("id-ID").format(demoCart * 28000)}</span></div></div><button className="button button-primary w-full justify-center" disabled={!demoCart} onClick={() => { setSaleComplete(true); setDemoCart(0); }}><Check size={15} /> Simulasikan pembayaran</button>{saleComplete && <p className="mt-2 text-center text-[10px] font-semibold text-[var(--mint-dark)]" role="status">Pembayaran demo berhasil. Tidak ada transaksi tersimpan.</p>}</section>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
