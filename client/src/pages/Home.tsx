@@ -330,7 +330,7 @@ function AuthLanding({
   onToast,
 }: {
   onAuthenticated: () => void;
-  onGoogle: () => void;
+  onGoogle: () => Promise<void>;
   onToast: (toast: Toast) => void;
 }) {
   const rememberedLoginKey = "kopipintar-remembered-login";
@@ -338,6 +338,7 @@ function AuthLanding({
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
@@ -398,6 +399,19 @@ function AuthLanding({
       setBusy(false);
     }
   };
+  const submitGoogle = async () => {
+    setLoginError(null);
+    setGoogleBusy(true);
+    try {
+      await onGoogle();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Login Google gagal. Silakan coba lagi.";
+      setLoginError(message);
+      onToast({ tone: "warning", message });
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
 
   return (
     <div className="grid min-h-screen place-items-center bg-[var(--paper)] px-4 py-6 sm:px-6 lg:px-8">
@@ -450,16 +464,13 @@ function AuthLanding({
               <div className="brand-subtitle">OPERATING SYSTEM</div>
             </div>
           </div>
-          <div className="mb-6 inline-flex rounded-lg bg-[var(--mint-soft)] p-1">
-            <span className="rounded-md bg-[var(--mint)] px-4 py-2 text-xs font-bold text-white">
-              Login
-            </span>
-          </div>
+          <div className="eyebrow mb-3">AKUN OPERATOR</div>
           <h2>Selamat datang kembali</h2>
           <p>
             Masuk dengan username atau email untuk membuka dashboard utama dan
             POS.
           </p>
+          <form onSubmit={event => { event.preventDefault(); void submit(); }}>
           <label className="mt-5 grid gap-2 text-[13px] font-bold">
             Username / Email
             <input
@@ -513,8 +524,8 @@ function AuthLanding({
             <span>Ingat saya</span>
           </label>
           <button
+            type="submit"
             className="button button-primary mt-5 w-full justify-center"
-            onClick={submit}
             disabled={busy}
           >
             {busy ? "Memproses..." : "Masuk ke Dashboard"}
@@ -527,6 +538,7 @@ function AuthLanding({
               {loginError}
             </div>
           )}
+          </form>
           <div className="my-5 flex items-center gap-2.5 text-xs text-[var(--ink-muted)]">
             <span className="h-px flex-1 bg-[var(--line)]" />
             atau
@@ -534,9 +546,10 @@ function AuthLanding({
           </div>
           <button
             className="button button-secondary w-full justify-center"
-            onClick={onGoogle}
+            onClick={() => void submitGoogle()}
+            disabled={googleBusy}
           >
-            Masuk dengan Google
+            {googleBusy ? "Menghubungkan ke Google..." : "Masuk dengan Google"}
           </button>
           <button
             className="button button-secondary mt-2 w-full justify-center"
@@ -2465,7 +2478,7 @@ function SettingsPage({
   displayName: string;
   outlet: OutletOption | null;
   taxRate: number | null;
-  onGoogleLogin: () => void;
+  onGoogleLogin: () => Promise<void>;
   onGoogleLogout: () => void;
   receiptFooter: string;
   onReceiptFooterChange: (value: string) => void;
@@ -2586,7 +2599,13 @@ function SettingsPage({
               <p style={{ marginTop: 18 }}>
                 Belum ada akun Google yang terhubung.
               </p>
-              <button className="button button-primary" onClick={onGoogleLogin}>
+              <button
+                className="button button-primary"
+                onClick={() => void onGoogleLogin().catch(error => onToast({
+                  tone: "warning",
+                  message: error instanceof Error ? error.message : "Login Google gagal.",
+                }))}
+              >
                 Masuk dengan Google
               </button>
               {!isSupabaseAuthConfigured && (
@@ -2991,12 +3010,12 @@ export default function Home() {
   }, [showToast]);
 
   const googleLogin = async () => {
-    if (!supabase) return showToast({ tone: "warning", message: "Google Auth belum dikonfigurasi." });
+    if (!supabase) throw new Error("Login belum aktif. Admin perlu mengatur koneksi Supabase terlebih dahulu.");
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: window.location.origin },
     });
-    if (error) showToast({ tone: "warning", message: error.message });
+    if (error) throw error;
   };
 
   const googleLogout = async () => {
