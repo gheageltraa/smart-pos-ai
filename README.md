@@ -1,4 +1,19 @@
-# ☕ Kopipintar — Smart POS & AI Inventory Forecast
+<p align="center">
+  <img src="assets/banner.svg" alt="Kopipintar - Smart POS and AI Inventory Forecast" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://kopi-pintar-pos-ai.vercel.app"><img alt="Demo langsung" src="https://img.shields.io/badge/Demo-Live%20di%20Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white"></a>
+</p>
+
+<p align="center">
+  <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white">
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white">
+  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white">
+  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-3FCF8E?style=flat-square&logo=supabase&logoColor=white">
+  <img alt="Vercel" src="https://img.shields.io/badge/Vercel-000000?style=flat-square&logo=vercel&logoColor=white">
+</p>
 
 Aplikasi kasir (Point of Sale), manajemen stok, dan prediksi kebutuhan stok untuk **kedai kopi UMKM**.
 
@@ -9,6 +24,13 @@ Kopipintar membantu pemilik kedai menjawab tiga pertanyaan sehari-hari:
 3. **Kapan harus belanja lagi, dan berapa banyak?** (prediksi stok habis + draft Purchase Order)
 
 > Status: proyek kompetisi/demo. Lihat bagian [Keterbatasan](#-keterbatasan-saat-ini) sebelum dipakai untuk bisnis sungguhan.
+
+**Tim: JiwooOrCarmen**
+
+| Anggota |
+| --- |
+| Dhanny Abdul Qodir Al Jaelany |
+| Ghea Geltra Ambarwinoto |
 
 ---
 
@@ -27,6 +49,7 @@ Kopipintar membantu pemilik kedai menjawab tiga pertanyaan sehari-hari:
 - [Keamanan](#-keamanan)
 - [Keterbatasan saat ini](#-keterbatasan-saat-ini)
 - [Pemecahan masalah](#-pemecahan-masalah)
+- [Tim](#-tim)
 
 ---
 
@@ -126,6 +149,9 @@ smart-pos-ai/
 │   ├── reporting.sql              ← Agregat laporan, demand, dan penerimaan PO atomik
 │   └── seed_demo_sales.sql        ← Opsional: transaksi demo bertanda DEMO-
 │
+├── assets/                  ← Gambar untuk README (banner animasi)
+│   └── banner.svg
+
 ├── scripts/                 ← Skrip bantuan yang dijalankan manual di komputer
 │   ├── db-setup.js          ← Membuat tabel + data contoh (aman dijalankan ulang)
 │   ├── create-users.js      ← Membuat akun admin & kasir lewat Supabase Admin API
@@ -321,4 +347,13 @@ Akun Google baru masuk sebagai **pending** dan harus disetujui admin (lihat [Per
 
 ---
 
-Dibuat untuk membantu UMKM kedai kopi mengelola kasir, stok, dan pembelian dengan lebih cerdas. ☕
+## 🤝 Tim
+
+Proyek ini dikembangkan oleh **Tim JiwooOrCarmen**:
+
+- Dhanny Abdul Qodir Al Jaelany
+- Ghea Geltra Ambarwinoto
+
+---
+
+Dibuat oleh Tim JiwooOrCarmen untuk membantu UMKM kedai kopi mengelola kasir, stok, dan pembelian dengan lebih cerdas. ☕
