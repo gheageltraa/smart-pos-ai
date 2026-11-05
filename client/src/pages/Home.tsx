@@ -2317,7 +2317,10 @@ function Orders({
   orders: PurchaseOrder[];
   onConfirm: (id: string) => void;
   onReceive: (order: PurchaseOrder) => void;
-  onEdit: (order: PurchaseOrder) => void;
+  onEdit: (
+    order: PurchaseOrder,
+    input: { supplier: string; qty: number; unit_cost: number; reason: string }
+  ) => Promise<void>;
   onDelete: (order: PurchaseOrder) => void;
   onToast: (toast: Toast) => void;
   onCreateDraft: () => void;
@@ -2326,10 +2329,49 @@ function Orders({
   onRefresh: () => void;
 }) {
   const [filter, setFilter] = useState("Semua");
+  const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
+  const [editSupplier, setEditSupplier] = useState("");
+  const [editQty, setEditQty] = useState("");
+  const [editUnitCost, setEditUnitCost] = useState("");
+  const [editReason, setEditReason] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const visible =
     filter === "Semua"
       ? orders
       : orders.filter(order => order.status === filter);
+  const openEdit = (order: PurchaseOrder) => {
+    setEditingOrder(order);
+    setEditSupplier(order.supplier);
+    setEditQty(String(order.qty));
+    setEditUnitCost(String(order.unitCost));
+    setEditReason(order.reason);
+    setEditError(null);
+  };
+  const saveEdit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingOrder) return;
+    const qty = Number(editQty);
+    const unitCost = Number(editUnitCost);
+    if (!editSupplier.trim()) return setEditError("Nama supplier wajib diisi.");
+    if (!Number.isFinite(qty) || qty <= 0) return setEditError("Jumlah harus lebih besar dari nol.");
+    if (!Number.isFinite(unitCost) || unitCost < 0) return setEditError("Harga satuan tidak boleh negatif.");
+    setEditError(null);
+    setSavingEdit(true);
+    try {
+      await onEdit(editingOrder, {
+        supplier: editSupplier.trim(),
+        qty,
+        unit_cost: unitCost,
+        reason: editReason.trim(),
+      });
+      setEditingOrder(null);
+    } catch (cause) {
+      setEditError(cause instanceof Error ? cause.message : "Purchase order gagal diperbarui.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
   return (
     <>
       <PageTitle
@@ -2435,7 +2477,7 @@ function Orders({
                     <div className="flex flex-wrap gap-2">
                       {order.status === "Draft" && (
                         <>
-                          <button className="small-action" onClick={() => onEdit(order)}>Edit</button>
+                          <button className="small-action" onClick={() => openEdit(order)}>Edit</button>
                           <button className="small-action" onClick={() => onConfirm(order.id)}>Pesan</button>
                           <button className="row-link" onClick={() => onDelete(order)}>Hapus</button>
                         </>
@@ -2457,6 +2499,33 @@ function Orders({
           </div>
         )}
       </section>
+      {editingOrder && (
+        <div className="modal-backdrop" onMouseDown={event => {
+          if (event.target === event.currentTarget && !savingEdit) setEditingOrder(null);
+        }}>
+          <form className="modal form-modal" onSubmit={event => void saveEdit(event)}>
+            <button type="button" className="modal-close" onClick={() => setEditingOrder(null)} aria-label="Tutup form" disabled={savingEdit}>
+              <X size={17} />
+            </button>
+            <div className="eyebrow">PURCHASE ORDER / {editingOrder.id}</div>
+            <h2>Edit draft pesanan</h2>
+            <p>{editingOrder.product} · Perubahan hanya berlaku selama status masih Draft.</p>
+            <label>Supplier<input required value={editSupplier} onChange={event => setEditSupplier(event.target.value)} /></label>
+            <label>Jumlah ({editingOrder.unit})<input type="number" min="0.01" step="any" required value={editQty} onChange={event => setEditQty(event.target.value)} /></label>
+            <label>Harga satuan<input type="number" min="0" step="any" required value={editUnitCost} onChange={event => setEditUnitCost(event.target.value)} /></label>
+            <label>Alasan order<textarea className="select-control min-h-20 w-full resize-y py-2" value={editReason} onChange={event => setEditReason(event.target.value)} /></label>
+            <div className="flex items-center justify-between rounded-lg bg-[var(--mint-soft)] px-3 py-2 text-xs">
+              <span className="font-semibold text-[var(--ink-soft)]">Estimasi total</span>
+              <b className="text-[var(--mint-dark)]">{money((Number(editQty) || 0) * (Number(editUnitCost) || 0))}</b>
+            </div>
+            {editError && <div className="rounded-lg border border-[#efc7c2] bg-[#fff1ef] px-3 py-2.5 text-xs leading-[1.45] text-[#a33d39]" role="alert">{editError}</div>}
+            <div className="modal-footer">
+              <button type="button" className="button button-secondary" onClick={() => setEditingOrder(null)} disabled={savingEdit}>Batal</button>
+              <button type="submit" className="button button-primary" disabled={savingEdit}>{savingEdit ? "Menyimpan..." : "Simpan perubahan"}</button>
+            </div>
+          </form>
+        </div>
+      )}
     </>
   );
 }
@@ -3080,23 +3149,17 @@ export default function Home() {
     }
   };
 
-  const editOrder = async (order: PurchaseOrder) => {
-    const qty = Number(window.prompt("Jumlah", String(order.qty)));
-    if (!Number.isFinite(qty) || qty <= 0) return showToast({ tone: "warning", message: "Jumlah harus lebih besar dari nol." });
-    const unitCost = Number(window.prompt("Harga satuan", String(order.unitCost)));
-    if (!Number.isFinite(unitCost) || unitCost < 0) return showToast({ tone: "warning", message: "Harga satuan tidak valid." });
-    const supplier = window.prompt("Supplier", order.supplier);
-    if (!supplier?.trim()) return;
-    const reason = window.prompt("Alasan order", order.reason);
-    if (reason === null) return;
+  const editOrder = async (
+    order: PurchaseOrder,
+    input: { supplier: string; qty: number; unit_cost: number; reason: string }
+  ) => {
     try {
-      await updateSupabasePurchaseOrder(order.id, selectedOutletId, {
-        supplier: supplier.trim(), qty, unit_cost: unitCost, reason: reason.trim(),
-      });
+      await updateSupabasePurchaseOrder(order.id, selectedOutletId, input);
       await refreshOrders();
       showToast({ tone: "success", message: `${order.id} berhasil diperbarui.` });
     } catch (error) {
       showToast({ tone: "warning", message: error instanceof Error ? `Order gagal diperbarui: ${error.message}` : "Order gagal diperbarui." });
+      throw error;
     }
   };
 
@@ -3173,7 +3236,7 @@ export default function Home() {
   } else if (effectivePage === "forecast") {
     content = <ForecastLive products={productsForUi} onCreateDraft={product => void createDraft(product)} onRefresh={() => void refreshProducts()} initialProductId={forecastProductId} loading={supabaseLoading} error={productError} />;
   } else if (effectivePage === "orders") {
-    content = <Orders orders={orders} loading={ordersLoading} error={ordersError} onRefresh={() => void refreshOrders()} onCreateDraft={() => void createDraft(productsForUi.find(product => getRisk(product) !== "Sehat"))} onConfirm={id => void changeOrderStatus(id)} onReceive={order => void receiveOrder(order)} onEdit={order => void editOrder(order)} onDelete={order => void deleteOrder(order)} onToast={showToast} />;
+    content = <Orders orders={orders} loading={ordersLoading} error={ordersError} onRefresh={() => void refreshOrders()} onCreateDraft={() => void createDraft(productsForUi.find(product => getRisk(product) !== "Sehat"))} onConfirm={id => void changeOrderStatus(id)} onReceive={order => void receiveOrder(order)} onEdit={editOrder} onDelete={order => void deleteOrder(order)} onToast={showToast} />;
   } else if (effectivePage === "suppliers") {
     content = <SuppliersLive products={productsForUi} onToast={showToast} />;
   } else if (effectivePage === "settings") {
