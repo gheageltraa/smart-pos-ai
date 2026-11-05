@@ -58,6 +58,7 @@ import {
   HelpCircle,
   LayoutDashboard,
   Menu,
+  MessageCircle,
   Minus,
   PackagePlus,
   Plus,
@@ -2833,6 +2834,25 @@ function HelpCenter({
           ))}
         </section>
       </div>
+      <section className="panel mt-[18px] flex flex-wrap items-center justify-between gap-4 border-[#d9ebe2] bg-[#f0f8f4] p-5 sm:p-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#d9eee2] text-[#26734f]">
+            <MessageCircle size={21} />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-[var(--ink)]">Butuh bantuan langsung?</h2>
+            <p className="mt-1 text-xs text-[var(--ink-soft)]">Hubungi admin melalui WhatsApp di 0811-8499-207.</p>
+          </div>
+        </div>
+        <a
+          className="button button-primary shrink-0"
+          href="https://wa.me/628118499207?text=Halo%20Admin%20Kopipintar%2C%20saya%20butuh%20bantuan."
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <MessageCircle size={15} /> Chat admin
+        </a>
+      </section>
     </>
   );
 }
